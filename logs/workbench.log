@@ -1,0 +1,506 @@
+2026-10-07 15:17:58,920 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 15:38:20,065 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 15:47:45,197 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 15:49:30,226 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 15:49:30,334 ERROR   gui.main_window: Failed to load file
+Traceback (most recent call last):
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\main_window.py", line 96, in _load_file
+    res = RasResults(path)
+          ^^^^^^^^^^^^^^^^
+TypeError: RasResults.__init__() missing 2 required positional arguments: 'h5' and 'info'
+2026-10-07 15:50:39,518 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 15:50:39,714 INFO    ras.hdf_discovery: Discovered 81 result variables in Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections
+2026-10-07 15:50:39,763 INFO    ras.hdf_reader: Opened E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\model_template_Ver2\R1_Dyn_SLR1.p01.hdf: HEC-RAS 7.0.1 June 2026, 285 XS, 3289 steps, 20 grain classes
+2026-10-07 15:50:40,553 ERROR   gui.main_window: Failed to load file
+Traceback (most recent call last):
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\main_window.py", line 109, in _load_file
+    self._update_plots()
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\main_window.py", line 122, in _update_plots
+    self.tab_ts.refresh(self.mds, self.display_units, self.pins, xs_index)
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\time_series_tab.py", line 65, in refresh
+    self._redraw()
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\time_series_tab.py", line 78, in _redraw
+    mf = self._mds.frame(self._xs_index, group_key, cfg)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\analysis\model_data.py", line 96, in frame
+    group = self.group(group_key)
+            ^^^^^^^^^^^^^^^^^^^^^
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\analysis\model_data.py", line 71, in group
+    raise AnalysisError(f"Unknown sediment group '{key}'.")
+core.exceptions.AnalysisError: Unknown sediment group 'Total'.
+2026-10-07 15:52:24,814 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 15:52:24,971 INFO    ras.hdf_discovery: Discovered 81 result variables in Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections
+2026-10-07 15:52:25,007 INFO    ras.hdf_reader: Opened E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\model_template_Ver2\R1_Dyn_SLR1.p01.hdf: HEC-RAS 7.0.1 June 2026, 285 XS, 3289 steps, 20 grain classes
+2026-10-07 15:52:25,710 ERROR   gui.main_window: Failed to load file
+Traceback (most recent call last):
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\main_window.py", line 109, in _load_file
+    self._update_plots()
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\main_window.py", line 122, in _update_plots
+    self.tab_ts.refresh(self.mds, self.display_units, self.pins, xs_index)
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\time_series_tab.py", line 78, in refresh
+    self._redraw()
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\time_series_tab.py", line 142, in _redraw
+    draw_timeseries(self.canvas.figure, req, self._du)
+                    ^^^^^^^^^^^^^^^^^^
+AttributeError: 'MplCanvas' object has no attribute 'figure'
+2026-10-07 15:53:35,511 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 15:53:36,140 INFO    ras.hdf_discovery: Discovered 81 result variables in Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections
+2026-10-07 15:53:36,219 INFO    ras.hdf_reader: Opened E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\model_template_Ver2\R1_Dyn_SLR1.p01.hdf: HEC-RAS 7.0.1 June 2026, 285 XS, 3289 steps, 20 grain classes
+2026-10-07 16:00:33,861 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 16:00:34,028 INFO    ras.hdf_discovery: Discovered 81 result variables in Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections
+2026-10-07 16:00:34,065 INFO    ras.hdf_reader: Opened E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\model_template_Ver2\R1_Dyn_SLR1.p01.hdf: HEC-RAS 7.0.1 June 2026, 285 XS, 3289 steps, 20 grain classes
+2026-10-07 16:04:06,768 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 16:04:06,961 INFO    ras.hdf_discovery: Discovered 81 result variables in Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections
+2026-10-07 16:04:06,998 INFO    ras.hdf_reader: Opened E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\model_template_Ver2\R1_Dyn_SLR1.p01.hdf: HEC-RAS 7.0.1 June 2026, 285 XS, 3289 steps, 20 grain classes
+2026-10-07 16:08:54,977 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 16:08:55,908 INFO    ras.hdf_discovery: Discovered 81 result variables in Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections
+2026-10-07 16:08:55,994 INFO    ras.hdf_reader: Opened E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\model_template_Ver2\R1_Dyn_SLR1.p01.hdf: HEC-RAS 7.0.1 June 2026, 285 XS, 3289 steps, 20 grain classes
+2026-10-07 16:28:57,543 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 16:28:57,802 INFO    observations.station_catalog: Loaded 13 observation stations
+2026-10-07 16:28:57,892 INFO    ras.hdf_discovery: Discovered 81 result variables in Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections
+2026-10-07 16:28:57,927 INFO    ras.hdf_reader: Opened E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\model_template_Ver2\R1_Dyn_SLR1.p01.hdf: HEC-RAS 7.0.1 June 2026, 285 XS, 3289 steps, 20 grain classes
+2026-10-07 16:28:59,838 ERROR   gui.main_window: Failed to load file
+Traceback (most recent call last):
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\main_window.py", line 112, in _load_file
+    self._update_plots()
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\main_window.py", line 134, in _update_plots
+    self.tab_diag.refresh(self.mds, xs_index)
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\diagnostics_tab.py", line 24, in refresh
+    lines.append(f"Plan: {info.plan_short_id} ({info.plan_name})")
+                          ^^^^^^^^^^^^^^^^^^
+AttributeError: 'RasModelInfo' object has no attribute 'plan_short_id'
+2026-10-07 16:30:05,441 INFO    observations.cache: Cache MISS usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01
+2026-10-07 16:30:07,553 INFO    observations.cache: Cache STORE usgs_wqp/USGS-07295025/usgs_wqp_samples: +117 rows, total 117
+2026-10-07 16:30:07,770 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-07 16:30:39,315 INFO    observations.cache: Cache MISS usace_cwms/USGS-07374200/cwms_stage 2004-01-01..2013-01-01
+2026-10-07 16:30:40,836 INFO    observations.cache: Cache STORE usace_cwms/USGS-07374200/cwms_stage: +0 rows, total 0
+2026-10-07 16:30:40,851 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374200/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:30:54,215 INFO    observations.cache: Cache MISS usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01
+2026-10-07 16:30:56,690 INFO    observations.cache: Cache STORE usgs_wqp/USGS-07374000/usgs_wqp_samples: +128 rows, total 128
+2026-10-07 16:30:56,707 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-07 16:30:56,708 INFO    observations.cache: Cache MISS usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01
+2026-10-07 16:30:57,681 INFO    observations.cache: Cache STORE usgs_dv/USGS-07374000/usgs_dv_discharge: +3212 rows, total 3212
+2026-10-07 16:30:57,695 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-07 16:30:57,695 INFO    observations.cache: Cache MISS usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01
+2026-10-07 16:30:58,634 INFO    observations.cache: Cache STORE usgs_dv/USGS-07374000/usgs_dv_stage: +3204 rows, total 3204
+2026-10-07 16:30:58,649 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-07 16:30:58,649 INFO    observations.cache: Cache MISS usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01
+2026-10-07 16:30:59,224 INFO    observations.cache: Cache STORE usace_cwms/USGS-07374000/cwms_stage: +0 rows, total 0
+2026-10-07 16:30:59,238 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:38:03,686 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 16:38:04,031 INFO    observations.station_catalog: Loaded 13 observation stations
+2026-10-07 16:38:04,149 INFO    ras.hdf_discovery: Discovered 81 result variables in Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections
+2026-10-07 16:38:04,188 INFO    ras.hdf_reader: Opened E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\model_template_Ver2\R1_Dyn_SLR1.p01.hdf: HEC-RAS 7.0.1 June 2026, 285 XS, 3289 steps, 20 grain classes
+2026-10-07 16:38:06,518 ERROR   gui.main_window: Failed to load file
+Traceback (most recent call last):
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\main_window.py", line 112, in _load_file
+    self._update_plots()
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\main_window.py", line 134, in _update_plots
+    self.tab_diag.refresh(self.mds, xs_index)
+  File "E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\gui\diagnostics_tab.py", line 24, in refresh
+    lines.append(f"Plan: {info.plan_short_id} ({info.plan_name})")
+                          ^^^^^^^^^^^^^^^^^^
+AttributeError: 'RasModelInfo' object has no attribute 'plan_short_id'
+2026-10-07 16:38:14,258 INFO    observations.cache: Cache MISS usgs_wqp/USGS-07010000/usgs_wqp_samples 2004-01-01..2013-01-01
+2026-10-07 16:38:18,680 INFO    observations.cache: Cache STORE usgs_wqp/USGS-07010000/usgs_wqp_samples: +1417 rows, total 1417
+2026-10-07 16:38:18,711 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07010000/usgs_wqp_samples 2004-01-01..2013-01-01 (1417 rows)
+2026-10-07 16:38:18,712 INFO    observations.cache: Cache MISS usgs_dv/USGS-07010000/usgs_dv_discharge 2004-01-01..2013-01-01
+2026-10-07 16:38:19,848 INFO    observations.cache: Cache STORE usgs_dv/USGS-07010000/usgs_dv_discharge: +3289 rows, total 3289
+2026-10-07 16:38:19,863 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:38:19,863 INFO    observations.cache: Cache MISS usgs_dv/USGS-07010000/usgs_dv_stage 2004-01-01..2013-01-01
+2026-10-07 16:38:20,743 INFO    observations.cache: Cache STORE usgs_dv/USGS-07010000/usgs_dv_stage: +3256 rows, total 3256
+2026-10-07 16:38:20,758 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_stage 2004-01-01..2013-01-01 (3256 rows)
+2026-10-07 16:38:20,758 INFO    observations.cache: Cache MISS usgs_dv/USGS-07010000/usgs_dv_ssc 2004-01-01..2013-01-01
+2026-10-07 16:38:21,543 INFO    observations.cache: Cache STORE usgs_dv/USGS-07010000/usgs_dv_ssc: +3288 rows, total 3288
+2026-10-07 16:38:21,558 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:38:21,558 INFO    observations.cache: Cache MISS usgs_dv/USGS-07010000/usgs_dv_ssl 2004-01-01..2013-01-01
+2026-10-07 16:38:22,290 INFO    observations.cache: Cache STORE usgs_dv/USGS-07010000/usgs_dv_ssl: +3288 rows, total 3288
+2026-10-07 16:38:22,305 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:38:22,334 INFO    observations.cache: Cache MISS usgs_wqp/USGS-07020500/usgs_wqp_samples 2004-01-01..2013-01-01
+2026-10-07 16:38:23,792 INFO    observations.cache: Cache STORE usgs_wqp/USGS-07020500/usgs_wqp_samples: +240 rows, total 240
+2026-10-07 16:38:23,807 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07020500/usgs_wqp_samples 2004-01-01..2013-01-01 (240 rows)
+2026-10-07 16:38:23,807 INFO    observations.cache: Cache MISS usgs_dv/USGS-07020500/usgs_dv_discharge 2004-01-01..2013-01-01
+2026-10-07 16:38:24,636 INFO    observations.cache: Cache STORE usgs_dv/USGS-07020500/usgs_dv_discharge: +3289 rows, total 3289
+2026-10-07 16:38:24,651 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:38:24,651 INFO    observations.cache: Cache MISS usgs_dv/USGS-07020500/usgs_dv_stage 2004-01-01..2013-01-01
+2026-10-07 16:38:25,408 INFO    observations.cache: Cache STORE usgs_dv/USGS-07020500/usgs_dv_stage: +3222 rows, total 3222
+2026-10-07 16:38:25,423 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_stage 2004-01-01..2013-01-01 (3222 rows)
+2026-10-07 16:38:25,423 INFO    observations.cache: Cache MISS usgs_dv/USGS-07020500/usgs_dv_ssc 2004-01-01..2013-01-01
+2026-10-07 16:38:26,276 INFO    observations.cache: Cache STORE usgs_dv/USGS-07020500/usgs_dv_ssc: +3288 rows, total 3288
+2026-10-07 16:38:26,290 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:38:26,290 INFO    observations.cache: Cache MISS usgs_dv/USGS-07020500/usgs_dv_ssl 2004-01-01..2013-01-01
+2026-10-07 16:38:27,009 INFO    observations.cache: Cache STORE usgs_dv/USGS-07020500/usgs_dv_ssl: +3288 rows, total 3288
+2026-10-07 16:38:27,026 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:38:27,051 INFO    observations.cache: Cache MISS usgs_wqp/USGS-07022000/usgs_wqp_samples 2004-01-01..2013-01-01
+2026-10-07 16:38:29,940 INFO    observations.cache: Cache STORE usgs_wqp/USGS-07022000/usgs_wqp_samples: +399 rows, total 399
+2026-10-07 16:38:29,956 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07022000/usgs_wqp_samples 2004-01-01..2013-01-01 (399 rows)
+2026-10-07 16:38:29,957 INFO    observations.cache: Cache MISS usgs_dv/USGS-07022000/usgs_dv_discharge 2004-01-01..2013-01-01
+2026-10-07 16:38:30,804 INFO    observations.cache: Cache STORE usgs_dv/USGS-07022000/usgs_dv_discharge: +3289 rows, total 3289
+2026-10-07 16:38:30,817 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:38:30,817 INFO    observations.cache: Cache MISS usgs_dv/USGS-07022000/usgs_dv_stage 2004-01-01..2013-01-01
+2026-10-07 16:38:31,563 INFO    observations.cache: Cache STORE usgs_dv/USGS-07022000/usgs_dv_stage: +3217 rows, total 3217
+2026-10-07 16:38:31,579 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_stage 2004-01-01..2013-01-01 (3217 rows)
+2026-10-07 16:38:31,579 INFO    observations.cache: Cache MISS usgs_dv/USGS-07022000/usgs_dv_ssl 2004-01-01..2013-01-01
+2026-10-07 16:38:32,358 INFO    observations.cache: Cache STORE usgs_dv/USGS-07022000/usgs_dv_ssl: +3289 rows, total 3289
+2026-10-07 16:38:32,372 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_ssl 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:38:32,393 INFO    observations.cache: Cache MISS usgs_wqp/USGS-07032000/usgs_wqp_samples 2004-01-01..2013-01-01
+2026-10-07 16:38:32,887 INFO    observations.cache: Cache STORE usgs_wqp/USGS-07032000/usgs_wqp_samples: +3 rows, total 3
+2026-10-07 16:38:32,902 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07032000/usgs_wqp_samples 2004-01-01..2013-01-01 (3 rows)
+2026-10-07 16:38:32,902 INFO    observations.cache: Cache MISS usgs_dv/USGS-07032000/usgs_dv_discharge 2004-01-01..2013-01-01
+2026-10-07 16:38:33,838 INFO    observations.cache: Cache STORE usgs_dv/USGS-07032000/usgs_dv_discharge: +0 rows, total 0
+2026-10-07 16:38:33,853 INFO    observations.cache: Cache HIT usgs_dv/USGS-07032000/usgs_dv_discharge 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:38:33,857 INFO    observations.cache: Cache MISS usgs_wqp/USGS-07289000/usgs_wqp_samples 2004-01-01..2013-01-01
+2026-10-07 16:38:34,408 INFO    observations.cache: Cache STORE usgs_wqp/USGS-07289000/usgs_wqp_samples: +11 rows, total 11
+2026-10-07 16:38:34,425 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07289000/usgs_wqp_samples 2004-01-01..2013-01-01 (11 rows)
+2026-10-07 16:38:34,426 INFO    observations.cache: Cache MISS usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01
+2026-10-07 16:38:35,184 INFO    observations.cache: Cache STORE usgs_dv/USGS-07289000/usgs_dv_discharge: +1828 rows, total 1828
+2026-10-07 16:38:35,203 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:38:35,203 INFO    observations.cache: Cache MISS usace_cwms/USGS-07289000/cwms_flow 2004-01-01..2013-01-01
+2026-10-07 16:38:37,988 INFO    observations.cache: Cache STORE usace_cwms/USGS-07289000/cwms_flow: +3289 rows, total 3289
+2026-10-07 16:38:38,003 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_flow 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:38:38,003 INFO    observations.cache: Cache MISS usace_cwms/USGS-07289000/cwms_stage 2004-01-01..2013-01-01
+2026-10-07 16:38:38,819 INFO    observations.cache: Cache STORE usace_cwms/USGS-07289000/cwms_stage: +3289 rows, total 3289
+2026-10-07 16:38:38,835 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_stage 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:38:38,853 INFO    observations.cache: Cache MISS usgs_wqp/USGS-07290880/usgs_wqp_samples 2004-01-01..2013-01-01
+2026-10-07 16:38:39,354 INFO    observations.cache: Cache STORE usgs_wqp/USGS-07290880/usgs_wqp_samples: +10 rows, total 10
+2026-10-07 16:38:39,369 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07290880/usgs_wqp_samples 2004-01-01..2013-01-01 (10 rows)
+2026-10-07 16:38:39,388 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-07 16:38:39,391 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-07 16:38:39,399 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:38:39,402 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:38:39,407 INFO    observations.cache: Cache MISS usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01
+2026-10-07 16:38:40,427 INFO    observations.cache: Cache STORE usgs_dv/USGS-07290000/usgs_dv_discharge: +3289 rows, total 3289
+2026-10-07 16:38:40,443 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:38:40,462 INFO    observations.cache: Cache MISS usgs_wqp/USGS-07295100/usgs_wqp_samples 2004-01-01..2013-01-01
+2026-10-07 16:38:41,636 INFO    observations.cache: Cache STORE usgs_wqp/USGS-07295100/usgs_wqp_samples: +162 rows, total 162
+2026-10-07 16:38:41,652 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295100/usgs_wqp_samples 2004-01-01..2013-01-01 (162 rows)
+2026-10-07 16:38:41,657 INFO    observations.cache: Cache MISS usgs_wqp/USGS-07373420/usgs_wqp_samples 2004-01-01..2013-01-01
+2026-10-07 16:38:43,381 INFO    observations.cache: Cache STORE usgs_wqp/USGS-07373420/usgs_wqp_samples: +132 rows, total 132
+2026-10-07 16:38:43,397 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07373420/usgs_wqp_samples 2004-01-01..2013-01-01 (132 rows)
+2026-10-07 16:38:43,416 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-07 16:38:43,420 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-07 16:38:43,434 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-07 16:38:43,438 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-07 16:38:43,451 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-07 16:38:43,455 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-07 16:38:43,468 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:38:43,471 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:38:43,496 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374200/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:38:43,498 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374200/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:38:43,499 INFO    observations.cache: Cache MISS usgs_wqp/USGS-07374525/usgs_wqp_samples 2004-01-01..2013-01-01
+2026-10-07 16:38:44,787 INFO    observations.cache: Cache STORE usgs_wqp/USGS-07374525/usgs_wqp_samples: +90 rows, total 90
+2026-10-07 16:38:44,803 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374525/usgs_wqp_samples 2004-01-01..2013-01-01 (90 rows)
+2026-10-07 16:38:44,803 INFO    observations.cache: Cache MISS usgs_dv/USGS-07374525/usgs_dv_discharge 2004-01-01..2013-01-01
+2026-10-07 16:38:45,439 INFO    observations.cache: Cache STORE usgs_dv/USGS-07374525/usgs_dv_discharge: +1516 rows, total 1516
+2026-10-07 16:38:45,454 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_discharge 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:38:45,455 INFO    observations.cache: Cache MISS usgs_dv/USGS-07374525/usgs_dv_stage 2004-01-01..2013-01-01
+2026-10-07 16:38:46,327 INFO    observations.cache: Cache STORE usgs_dv/USGS-07374525/usgs_dv_stage: +1516 rows, total 1516
+2026-10-07 16:38:46,350 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_stage 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:44:07,777 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 16:44:10,821 INFO    observations.station_catalog: Loaded 13 observation stations
+2026-10-07 16:44:10,923 INFO    ras.hdf_discovery: Discovered 81 result variables in Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections
+2026-10-07 16:44:10,988 INFO    ras.hdf_reader: Opened E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\model_template_Ver2\R1_Dyn_SLR1.p01.hdf: HEC-RAS 7.0.1 June 2026, 285 XS, 3289 steps, 20 grain classes
+2026-10-07 16:44:28,671 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07010000/usgs_wqp_samples 2004-01-01..2013-01-01 (1417 rows)
+2026-10-07 16:44:28,676 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07010000/usgs_wqp_samples 2004-01-01..2013-01-01 (1417 rows)
+2026-10-07 16:44:28,679 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,682 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,685 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_stage 2004-01-01..2013-01-01 (3256 rows)
+2026-10-07 16:44:28,688 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_stage 2004-01-01..2013-01-01 (3256 rows)
+2026-10-07 16:44:28,691 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:44:28,694 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:44:28,697 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:44:28,700 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:44:28,733 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07020500/usgs_wqp_samples 2004-01-01..2013-01-01 (240 rows)
+2026-10-07 16:44:28,736 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07020500/usgs_wqp_samples 2004-01-01..2013-01-01 (240 rows)
+2026-10-07 16:44:28,739 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,741 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,745 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_stage 2004-01-01..2013-01-01 (3222 rows)
+2026-10-07 16:44:28,747 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_stage 2004-01-01..2013-01-01 (3222 rows)
+2026-10-07 16:44:28,750 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:44:28,753 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:44:28,756 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:44:28,758 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:44:28,788 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07022000/usgs_wqp_samples 2004-01-01..2013-01-01 (399 rows)
+2026-10-07 16:44:28,791 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07022000/usgs_wqp_samples 2004-01-01..2013-01-01 (399 rows)
+2026-10-07 16:44:28,794 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,797 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,799 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_stage 2004-01-01..2013-01-01 (3217 rows)
+2026-10-07 16:44:28,802 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_stage 2004-01-01..2013-01-01 (3217 rows)
+2026-10-07 16:44:28,805 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_ssl 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,809 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_ssl 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,835 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07032000/usgs_wqp_samples 2004-01-01..2013-01-01 (3 rows)
+2026-10-07 16:44:28,838 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07032000/usgs_wqp_samples 2004-01-01..2013-01-01 (3 rows)
+2026-10-07 16:44:28,841 INFO    observations.cache: Cache HIT usgs_dv/USGS-07032000/usgs_dv_discharge 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:44:28,844 INFO    observations.cache: Cache HIT usgs_dv/USGS-07032000/usgs_dv_discharge 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:44:28,851 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07289000/usgs_wqp_samples 2004-01-01..2013-01-01 (11 rows)
+2026-10-07 16:44:28,854 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07289000/usgs_wqp_samples 2004-01-01..2013-01-01 (11 rows)
+2026-10-07 16:44:28,857 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:44:28,859 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:44:28,862 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_flow 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,864 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_flow 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,867 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_stage 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,870 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_stage 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,890 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07290880/usgs_wqp_samples 2004-01-01..2013-01-01 (10 rows)
+2026-10-07 16:44:28,894 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07290880/usgs_wqp_samples 2004-01-01..2013-01-01 (10 rows)
+2026-10-07 16:44:28,901 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-07 16:44:28,904 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-07 16:44:28,911 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:44:28,914 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:44:28,921 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,924 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:44:28,938 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295100/usgs_wqp_samples 2004-01-01..2013-01-01 (162 rows)
+2026-10-07 16:44:28,941 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295100/usgs_wqp_samples 2004-01-01..2013-01-01 (162 rows)
+2026-10-07 16:44:28,949 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07373420/usgs_wqp_samples 2004-01-01..2013-01-01 (132 rows)
+2026-10-07 16:44:28,952 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07373420/usgs_wqp_samples 2004-01-01..2013-01-01 (132 rows)
+2026-10-07 16:44:28,961 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-07 16:44:28,964 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-07 16:44:28,967 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-07 16:44:28,969 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-07 16:44:28,972 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-07 16:44:28,975 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-07 16:44:28,977 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:44:28,980 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:44:28,997 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374200/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:44:29,000 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374200/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:44:29,003 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374525/usgs_wqp_samples 2004-01-01..2013-01-01 (90 rows)
+2026-10-07 16:44:29,007 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374525/usgs_wqp_samples 2004-01-01..2013-01-01 (90 rows)
+2026-10-07 16:44:29,009 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_discharge 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:44:29,012 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_discharge 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:44:29,015 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_stage 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:44:29,017 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_stage 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:52:09,401 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 16:52:12,257 INFO    observations.station_catalog: Loaded 13 observation stations
+2026-10-07 16:52:12,355 INFO    ras.hdf_discovery: Discovered 81 result variables in Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections
+2026-10-07 16:52:12,410 INFO    ras.hdf_reader: Opened E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\model_template_Ver2\R1_Dyn_SLR1.p01.hdf: HEC-RAS 7.0.1 June 2026, 285 XS, 3289 steps, 20 grain classes
+2026-10-07 16:52:33,059 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07010000/usgs_wqp_samples 2004-01-01..2013-01-01 (1417 rows)
+2026-10-07 16:52:33,063 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07010000/usgs_wqp_samples 2004-01-01..2013-01-01 (1417 rows)
+2026-10-07 16:52:33,079 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,082 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,095 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_stage 2004-01-01..2013-01-01 (3256 rows)
+2026-10-07 16:52:33,098 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_stage 2004-01-01..2013-01-01 (3256 rows)
+2026-10-07 16:52:33,112 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:52:33,115 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:52:33,129 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:52:33,132 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:52:33,178 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07020500/usgs_wqp_samples 2004-01-01..2013-01-01 (240 rows)
+2026-10-07 16:52:33,182 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07020500/usgs_wqp_samples 2004-01-01..2013-01-01 (240 rows)
+2026-10-07 16:52:33,196 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,199 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,213 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_stage 2004-01-01..2013-01-01 (3222 rows)
+2026-10-07 16:52:33,217 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_stage 2004-01-01..2013-01-01 (3222 rows)
+2026-10-07 16:52:33,230 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:52:33,233 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:52:33,247 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:52:33,250 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:52:33,291 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07022000/usgs_wqp_samples 2004-01-01..2013-01-01 (399 rows)
+2026-10-07 16:52:33,294 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07022000/usgs_wqp_samples 2004-01-01..2013-01-01 (399 rows)
+2026-10-07 16:52:33,308 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,311 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,325 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_stage 2004-01-01..2013-01-01 (3217 rows)
+2026-10-07 16:52:33,328 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_stage 2004-01-01..2013-01-01 (3217 rows)
+2026-10-07 16:52:33,342 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_ssl 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,345 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_ssl 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,381 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07032000/usgs_wqp_samples 2004-01-01..2013-01-01 (3 rows)
+2026-10-07 16:52:33,385 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07032000/usgs_wqp_samples 2004-01-01..2013-01-01 (3 rows)
+2026-10-07 16:52:33,397 INFO    observations.cache: Cache HIT usgs_dv/USGS-07032000/usgs_dv_discharge 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:52:33,400 INFO    observations.cache: Cache HIT usgs_dv/USGS-07032000/usgs_dv_discharge 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:52:33,420 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07289000/usgs_wqp_samples 2004-01-01..2013-01-01 (11 rows)
+2026-10-07 16:52:33,423 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07289000/usgs_wqp_samples 2004-01-01..2013-01-01 (11 rows)
+2026-10-07 16:52:33,437 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:52:33,439 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:52:33,453 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_flow 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,455 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_flow 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,470 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_stage 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,472 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_stage 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,505 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07290880/usgs_wqp_samples 2004-01-01..2013-01-01 (10 rows)
+2026-10-07 16:52:33,508 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07290880/usgs_wqp_samples 2004-01-01..2013-01-01 (10 rows)
+2026-10-07 16:52:33,526 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-07 16:52:33,529 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-07 16:52:33,536 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:52:33,538 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:52:33,560 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,563 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:52:33,594 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295100/usgs_wqp_samples 2004-01-01..2013-01-01 (162 rows)
+2026-10-07 16:52:33,597 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295100/usgs_wqp_samples 2004-01-01..2013-01-01 (162 rows)
+2026-10-07 16:52:33,616 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07373420/usgs_wqp_samples 2004-01-01..2013-01-01 (132 rows)
+2026-10-07 16:52:33,620 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07373420/usgs_wqp_samples 2004-01-01..2013-01-01 (132 rows)
+2026-10-07 16:52:33,638 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-07 16:52:33,641 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-07 16:52:33,657 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-07 16:52:33,660 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-07 16:52:33,674 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-07 16:52:33,676 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-07 16:52:33,690 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:52:33,693 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:52:33,718 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374200/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:52:33,721 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374200/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:52:33,736 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374525/usgs_wqp_samples 2004-01-01..2013-01-01 (90 rows)
+2026-10-07 16:52:33,739 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374525/usgs_wqp_samples 2004-01-01..2013-01-01 (90 rows)
+2026-10-07 16:52:33,753 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_discharge 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:52:33,755 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_discharge 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:52:33,770 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_stage 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:52:33,773 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_stage 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:55:52,161 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-07 16:55:54,787 INFO    observations.station_catalog: Loaded 13 observation stations
+2026-10-07 16:55:54,902 INFO    ras.hdf_discovery: Discovered 81 result variables in Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections
+2026-10-07 16:55:54,974 INFO    ras.hdf_reader: Opened E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\model_template_Ver2\R1_Dyn_SLR1.p01.hdf: HEC-RAS 7.0.1 June 2026, 285 XS, 3289 steps, 20 grain classes
+2026-10-07 16:56:09,500 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07010000/usgs_wqp_samples 2004-01-01..2013-01-01 (1417 rows)
+2026-10-07 16:56:09,504 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07010000/usgs_wqp_samples 2004-01-01..2013-01-01 (1417 rows)
+2026-10-07 16:56:09,520 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:09,523 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:09,537 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_stage 2004-01-01..2013-01-01 (3256 rows)
+2026-10-07 16:56:09,540 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_stage 2004-01-01..2013-01-01 (3256 rows)
+2026-10-07 16:56:09,554 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:56:09,558 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:56:09,571 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:56:09,575 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:56:09,621 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07020500/usgs_wqp_samples 2004-01-01..2013-01-01 (240 rows)
+2026-10-07 16:56:09,624 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07020500/usgs_wqp_samples 2004-01-01..2013-01-01 (240 rows)
+2026-10-07 16:56:09,639 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:09,642 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:09,656 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_stage 2004-01-01..2013-01-01 (3222 rows)
+2026-10-07 16:56:09,658 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_stage 2004-01-01..2013-01-01 (3222 rows)
+2026-10-07 16:56:09,673 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:56:09,676 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:56:09,690 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:56:09,693 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-07 16:56:09,735 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07022000/usgs_wqp_samples 2004-01-01..2013-01-01 (399 rows)
+2026-10-07 16:56:09,739 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07022000/usgs_wqp_samples 2004-01-01..2013-01-01 (399 rows)
+2026-10-07 16:56:09,753 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:09,756 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:09,771 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_stage 2004-01-01..2013-01-01 (3217 rows)
+2026-10-07 16:56:09,774 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_stage 2004-01-01..2013-01-01 (3217 rows)
+2026-10-07 16:56:09,787 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_ssl 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:09,791 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_ssl 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:09,827 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07032000/usgs_wqp_samples 2004-01-01..2013-01-01 (3 rows)
+2026-10-07 16:56:09,831 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07032000/usgs_wqp_samples 2004-01-01..2013-01-01 (3 rows)
+2026-10-07 16:56:09,845 INFO    observations.cache: Cache HIT usgs_dv/USGS-07032000/usgs_dv_discharge 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:56:09,847 INFO    observations.cache: Cache HIT usgs_dv/USGS-07032000/usgs_dv_discharge 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:56:09,867 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07289000/usgs_wqp_samples 2004-01-01..2013-01-01 (11 rows)
+2026-10-07 16:56:09,870 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07289000/usgs_wqp_samples 2004-01-01..2013-01-01 (11 rows)
+2026-10-07 16:56:09,884 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:56:09,887 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:56:09,900 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_flow 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:09,903 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_flow 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:09,916 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_stage 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:09,919 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_stage 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:09,952 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07290880/usgs_wqp_samples 2004-01-01..2013-01-01 (10 rows)
+2026-10-07 16:56:09,954 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07290880/usgs_wqp_samples 2004-01-01..2013-01-01 (10 rows)
+2026-10-07 16:56:09,973 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-07 16:56:09,976 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-07 16:56:09,983 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:56:09,986 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:56:10,004 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:10,007 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:10,039 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295100/usgs_wqp_samples 2004-01-01..2013-01-01 (162 rows)
+2026-10-07 16:56:10,042 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295100/usgs_wqp_samples 2004-01-01..2013-01-01 (162 rows)
+2026-10-07 16:56:10,062 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07373420/usgs_wqp_samples 2004-01-01..2013-01-01 (132 rows)
+2026-10-07 16:56:10,066 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07373420/usgs_wqp_samples 2004-01-01..2013-01-01 (132 rows)
+2026-10-07 16:56:10,085 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-07 16:56:10,088 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-07 16:56:10,101 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-07 16:56:10,104 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-07 16:56:10,119 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-07 16:56:10,122 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-07 16:56:10,135 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:56:10,137 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:56:10,164 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374200/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:56:10,166 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374200/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-07 16:56:10,181 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374525/usgs_wqp_samples 2004-01-01..2013-01-01 (90 rows)
+2026-10-07 16:56:10,184 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374525/usgs_wqp_samples 2004-01-01..2013-01-01 (90 rows)
+2026-10-07 16:56:10,197 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_discharge 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:56:10,199 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_discharge 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:56:10,213 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_stage 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:56:10,216 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_stage 2004-01-01..2013-01-01 (1516 rows)
+2026-10-07 16:56:15,880 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-07 16:56:15,886 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-07 16:56:15,894 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:56:15,897 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-07 16:56:15,905 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-07 16:56:15,908 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:02:27,066 INFO    core.logging_setup: Logging started; file=E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\hecras_sediment_calibrator\logs\workbench.log
+2026-10-08 09:02:30,073 INFO    observations.station_catalog: Loaded 13 observation stations
+2026-10-08 09:02:30,187 INFO    ras.hdf_discovery: Discovered 81 result variables in Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections
+2026-10-08 09:02:30,246 INFO    ras.hdf_reader: Opened E:\LMR Comp Phase 2\Calibration_2004_2025\sediment_calibration\model_template_Ver2\R1_Dyn_SLR1.p01.hdf: HEC-RAS 7.0.1 June 2026, 285 XS, 3289 steps, 20 grain classes
+2026-10-08 09:03:30,743 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07010000/usgs_wqp_samples 2004-01-01..2013-01-01 (1417 rows)
+2026-10-08 09:03:30,747 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07010000/usgs_wqp_samples 2004-01-01..2013-01-01 (1417 rows)
+2026-10-08 09:03:30,762 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:30,765 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:30,780 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_stage 2004-01-01..2013-01-01 (3256 rows)
+2026-10-08 09:03:30,783 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_stage 2004-01-01..2013-01-01 (3256 rows)
+2026-10-08 09:03:30,798 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-08 09:03:30,801 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-08 09:03:30,815 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-08 09:03:30,818 INFO    observations.cache: Cache HIT usgs_dv/USGS-07010000/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-08 09:03:30,863 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07020500/usgs_wqp_samples 2004-01-01..2013-01-01 (240 rows)
+2026-10-08 09:03:30,865 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07020500/usgs_wqp_samples 2004-01-01..2013-01-01 (240 rows)
+2026-10-08 09:03:30,880 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:30,883 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:30,897 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_stage 2004-01-01..2013-01-01 (3222 rows)
+2026-10-08 09:03:30,900 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_stage 2004-01-01..2013-01-01 (3222 rows)
+2026-10-08 09:03:30,915 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-08 09:03:30,918 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssc 2004-01-01..2013-01-01 (3288 rows)
+2026-10-08 09:03:30,932 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-08 09:03:30,935 INFO    observations.cache: Cache HIT usgs_dv/USGS-07020500/usgs_dv_ssl 2004-01-01..2013-01-01 (3288 rows)
+2026-10-08 09:03:30,976 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07022000/usgs_wqp_samples 2004-01-01..2013-01-01 (399 rows)
+2026-10-08 09:03:30,979 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07022000/usgs_wqp_samples 2004-01-01..2013-01-01 (399 rows)
+2026-10-08 09:03:30,994 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:30,997 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:31,011 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_stage 2004-01-01..2013-01-01 (3217 rows)
+2026-10-08 09:03:31,014 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_stage 2004-01-01..2013-01-01 (3217 rows)
+2026-10-08 09:03:31,030 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_ssl 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:31,033 INFO    observations.cache: Cache HIT usgs_dv/USGS-07022000/usgs_dv_ssl 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:31,071 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07032000/usgs_wqp_samples 2004-01-01..2013-01-01 (3 rows)
+2026-10-08 09:03:31,074 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07032000/usgs_wqp_samples 2004-01-01..2013-01-01 (3 rows)
+2026-10-08 09:03:31,087 INFO    observations.cache: Cache HIT usgs_dv/USGS-07032000/usgs_dv_discharge 2004-01-01..2013-01-01 (0 rows)
+2026-10-08 09:03:31,090 INFO    observations.cache: Cache HIT usgs_dv/USGS-07032000/usgs_dv_discharge 2004-01-01..2013-01-01 (0 rows)
+2026-10-08 09:03:31,110 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07289000/usgs_wqp_samples 2004-01-01..2013-01-01 (11 rows)
+2026-10-08 09:03:31,114 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07289000/usgs_wqp_samples 2004-01-01..2013-01-01 (11 rows)
+2026-10-08 09:03:31,127 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-08 09:03:31,130 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-08 09:03:31,143 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_flow 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:31,146 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_flow 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:31,160 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_stage 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:31,163 INFO    observations.cache: Cache HIT usace_cwms/USGS-07289000/cwms_stage 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:31,196 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07290880/usgs_wqp_samples 2004-01-01..2013-01-01 (10 rows)
+2026-10-08 09:03:31,199 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07290880/usgs_wqp_samples 2004-01-01..2013-01-01 (10 rows)
+2026-10-08 09:03:31,218 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-08 09:03:31,221 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-08 09:03:31,228 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-08 09:03:31,231 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-08 09:03:31,251 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:31,254 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:31,288 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295100/usgs_wqp_samples 2004-01-01..2013-01-01 (162 rows)
+2026-10-08 09:03:31,292 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295100/usgs_wqp_samples 2004-01-01..2013-01-01 (162 rows)
+2026-10-08 09:03:31,312 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07373420/usgs_wqp_samples 2004-01-01..2013-01-01 (132 rows)
+2026-10-08 09:03:31,315 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07373420/usgs_wqp_samples 2004-01-01..2013-01-01 (132 rows)
+2026-10-08 09:03:31,333 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-08 09:03:31,336 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-08 09:03:31,351 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-08 09:03:31,354 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-08 09:03:31,368 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-08 09:03:31,371 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-08 09:03:31,384 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-08 09:03:31,387 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-08 09:03:31,411 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374200/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-08 09:03:31,413 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374200/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-08 09:03:31,428 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374525/usgs_wqp_samples 2004-01-01..2013-01-01 (90 rows)
+2026-10-08 09:03:31,431 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374525/usgs_wqp_samples 2004-01-01..2013-01-01 (90 rows)
+2026-10-08 09:03:31,445 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_discharge 2004-01-01..2013-01-01 (1516 rows)
+2026-10-08 09:03:31,448 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_discharge 2004-01-01..2013-01-01 (1516 rows)
+2026-10-08 09:03:31,969 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_stage 2004-01-01..2013-01-01 (1516 rows)
+2026-10-08 09:03:31,972 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374525/usgs_dv_stage 2004-01-01..2013-01-01 (1516 rows)
+2026-10-08 09:03:38,412 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-08 09:03:38,418 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07295025/usgs_wqp_samples 2004-01-01..2013-01-01 (117 rows)
+2026-10-08 09:03:38,427 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-08 09:03:38,430 INFO    observations.cache: Cache HIT usgs_dv/USGS-07289000/usgs_dv_discharge 2004-01-01..2013-01-01 (1828 rows)
+2026-10-08 09:03:38,439 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:03:38,442 INFO    observations.cache: Cache HIT usgs_dv/USGS-07290000/usgs_dv_discharge 2004-01-01..2013-01-01 (3289 rows)
+2026-10-08 09:06:39,965 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-08 09:06:39,971 INFO    observations.cache: Cache HIT usgs_wqp/USGS-07374000/usgs_wqp_samples 2004-01-01..2013-01-01 (128 rows)
+2026-10-08 09:06:39,975 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-08 09:06:39,979 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_discharge 2004-01-01..2013-01-01 (3212 rows)
+2026-10-08 09:06:39,983 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-08 09:06:39,987 INFO    observations.cache: Cache HIT usgs_dv/USGS-07374000/usgs_dv_stage 2004-01-01..2013-01-01 (3204 rows)
+2026-10-08 09:06:39,989 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
+2026-10-08 09:06:39,991 INFO    observations.cache: Cache HIT usace_cwms/USGS-07374000/cwms_stage 2004-01-01..2013-01-01 (0 rows)
