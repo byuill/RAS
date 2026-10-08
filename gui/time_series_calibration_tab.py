@@ -17,6 +17,7 @@ from core.io import atomic_text, atomic_writer
 from gui.calibration_tab import CalibrationTab, KINDS, STAT_ROWS, VARS
 from gui.mpl_canvas import MplCanvas
 from plotting.time_series_calibration import draw_time_series_calibration
+from sediment.units import convert, M3_PER_CFS
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,9 @@ class TimeSeriesCalibrationTab(CalibrationTab):
         self._mds = self._du = self._xs_index = self._obs = None
         self._paired = self._result = None
         self._context = {}
+        self._manual_points = []
+        self._curve_context = None
+        self._threshold_initialized = False
         layout = QVBoxLayout(self)
 
         row = QHBoxLayout()
@@ -121,6 +125,25 @@ class TimeSeriesCalibrationTab(CalibrationTab):
             row.addWidget(QLabel(label)); row.addWidget(widget)
         row.addStretch(); layout.addLayout(row)
 
+        row = QHBoxLayout()
+        self.spin_low_q = QDoubleSpinBox(); self.spin_low_q.setRange(0, 1e9)
+        self.spin_low_q.setDecimals(0); self.spin_low_q.setValue(300000)
+        self.lbl_low_q_unit = QLabel('cfs')
+        self.btn_low_q = QPushButton('Exclude low-Q measurements'); self.btn_low_q.setCheckable(True)
+        self.btn_low_q.setToolTip('Exclude registered Q below the threshold from fitting and sample metrics in this tab. Unknown Q stays available for concentration comparisons. Click again to restore.')
+        self.combo_fit_source = QComboBox()
+        self.combo_fit_source.addItem('Observed measurements', 'observed')
+        self.combo_fit_source.addItem('Drawn control points', 'manual')
+        self.btn_draw = QPushButton('Draw points'); self.btn_draw.setCheckable(True)
+        self.btn_draw.setToolTip('Click the observed rating-curve plot to add positive-discharge control points. Turn off the toolbar pan/zoom mode first.')
+        self.btn_undo_point = QPushButton('Undo point')
+        self.btn_clear_points = QPushButton('Clear points')
+        for label, widget in [('Low-Q threshold:', self.spin_low_q), ('Fit to:', self.combo_fit_source)]:
+            row.addWidget(QLabel(label)); row.addWidget(widget)
+            if widget is self.spin_low_q: row.addWidget(self.lbl_low_q_unit); row.addWidget(self.btn_low_q)
+        for widget in (self.btn_draw, self.btn_undo_point, self.btn_clear_points): row.addWidget(widget)
+        row.addStretch(); layout.addLayout(row)
+
         self.lbl_status = QLabel('Load a model and observations on the Observations tab.')
         self.lbl_status.setWordWrap(True); layout.addWidget(self.lbl_status)
         self.lbl_fit = QLabel('Rating functions use observed discharge and sediment from the same record.')
@@ -149,6 +172,13 @@ class TimeSeriesCalibrationTab(CalibrationTab):
             check.toggled.connect(self._recompute)
         self.btn_full.clicked.connect(self._full_record)
         self.btn_export.clicked.connect(self._export)
+        self.btn_low_q.toggled.connect(self._low_flow_changed)
+        self.spin_low_q.valueChanged.connect(self._recompute)
+        self.combo_fit_source.currentIndexChanged.connect(self._recompute)
+        self.btn_draw.toggled.connect(self._drawing_changed)
+        self.btn_undo_point.clicked.connect(self._undo_point)
+        self.btn_clear_points.clicked.connect(self._clear_points)
+        self.canvas.canvas.mpl_connect('button_press_event', self._on_plot_click)
         self._options_changed()
 
     def refresh(self, mds, du, xs_index):
@@ -164,7 +194,55 @@ class TimeSeriesCalibrationTab(CalibrationTab):
             self._full_record(recompute=False)
         else:
             self._du, self._xs_index = du, xs_index
+        if not self._threshold_initialized:
+            self.spin_low_q.blockSignals(True)
+            self.spin_low_q.setValue(float(du.convert(300000*M3_PER_CFS, 'discharge')))
+            self.spin_low_q.blockSignals(False)
+            self.lbl_low_q_unit.setText(du.label('discharge'))
+            self._threshold_initialized = True
         self._recompute()
+
+    def set_observations(self, obs):
+        if self._obs is not obs:
+            self._reset_manual()
+        super().set_observations(obs)
+
+    def _reset_manual(self):
+        self._manual_points = []
+        self.combo_fit_source.blockSignals(True); self.combo_fit_source.setCurrentIndex(0)
+        self.combo_fit_source.blockSignals(False)
+        self.btn_draw.blockSignals(True); self.btn_draw.setChecked(False); self.btn_draw.blockSignals(False)
+
+    def _low_flow_changed(self, checked):
+        self.btn_low_q.setText('Restore low-Q measurements' if checked else 'Exclude low-Q measurements')
+        self._recompute()
+
+    def _drawing_changed(self, checked):
+        if checked:
+            self.combo_display.setCurrentIndex(self.combo_display.findData('both'))
+            self.combo_fit_source.setCurrentIndex(self.combo_fit_source.findData('manual'))
+            self.lbl_status.setText('Click the rating plot to add control points; at least two distinct Q values are needed (degree+1 for a polynomial).')
+
+    def _on_plot_click(self, event):
+        if not self.btn_draw.isChecked() or self._du is None or self.canvas.toolbar.mode:
+            return
+        axes = self.canvas.figure.axes
+        if len(axes) != 3 or event.inaxes is not axes[2] or event.button != 1:
+            return
+        if event.xdata is None or event.ydata is None or not np.isfinite([event.xdata, event.ydata]).all():
+            return
+        quantity = VARS[self.combo_var.currentText()][1]
+        q = float(convert(event.xdata, self._du.unit('discharge'), 'm3/s'))
+        y = float(convert(event.ydata, self._du.unit(quantity), 'mg/L' if quantity == 'concentration' else 'kg/s'))
+        if q <= 0 or y < 0: return
+        self._manual_points.append((q, y)); self._recompute()
+
+    def _undo_point(self):
+        if self._manual_points: self._manual_points.pop()
+        self._recompute()
+
+    def _clear_points(self):
+        self._manual_points = []; self._recompute()
 
     def _options_changed(self, *_):
         enabled = self.combo_display.currentData() != 'points'
@@ -195,13 +273,18 @@ class TimeSeriesCalibrationTab(CalibrationTab):
             self._show_message('The start date must be on or before the end date.'); return
         col, quantity = VARS[self.combo_var.currentText()]
         group = self.combo_group.currentData() or 'total'
+        context = (id(self._mds), self._xs_index, col, group)
+        if self._curve_context != context:
+            self._reset_manual(); self._curve_context = context
         display = self.combo_display.currentData()
         try:
             frame = self._mds.frame(self._xs_index, group, self._mds.rouse_cfg)
             result = build_comparison(frame.df, self._obs.df, col, group, kinds, start, end,
                 self.combo_mode.currentData(), self.spin_gap.value(), self.spin_offset.value(),
                 self.combo_function.currentData(), self.spin_degree.value(), self.combo_driver.currentData(),
-                self.chk_extrapolate.isChecked(), self.chk_smear.isChecked(), display != 'points')
+                self.chk_extrapolate.isChecked(), self.chk_smear.isChecked(), display != 'points',
+                float(convert(self.spin_low_q.value(), self._du.unit('discharge'), 'm3/s')) if self.btn_low_q.isChecked() else None,
+                self._manual_points if self.combo_fit_source.currentData() == 'manual' else None)
             if result.series.empty:
                 self._show_message('No model output in the selected date range.'); return
             measured = comparison_statistics(self._du.convert(result.samples.obs.to_numpy(), quantity),
@@ -211,7 +294,7 @@ class TimeSeriesCalibrationTab(CalibrationTab):
             label = 'Sediment concentration' if col == 'Conc' else 'Sediment load'
             draw_time_series_calibration(self.canvas.figure, result, quantity, label, self._du, display,
                                          self.chk_log.isChecked(), f'{label}: {frame.meta["sediment_group_label"]} at {frame.meta["xs_label"]}',
-                                         self.chk_extrapolate.isChecked(), self.chk_smear.isChecked())
+                                         self.chk_extrapolate.isChecked(), self.chk_smear.isChecked(), self._manual_points)
             self.canvas.draw()
             self._fill_comparison_stats(measured, rating, self._du.label(quantity))
             fit_meta = result.fit.summary() if result.fit else None
@@ -225,6 +308,8 @@ class TimeSeriesCalibrationTab(CalibrationTab):
                     text += f' Log-space R²={result.fit.r2_log:.3g}; smearing factor={result.fit.smearing_factor:.4g}'
                     text += ' (applied to predictions).' if self.chk_smear.isChecked() else ' (not applied).'
                 self.lbl_fit.setText(text)
+                if self.combo_fit_source.currentData() == 'manual':
+                    self.lbl_fit.setText('MANUAL CONTROL-POINT FIT (not measured-data fit quality). '+text)
             else:
                 self.lbl_fit.setText('Rating fit not requested.' if display == 'points' else 'No usable rating fit; measured pairs remain available.')
             finite_obs = np.isfinite(result.samples.obs.to_numpy())
@@ -239,6 +324,7 @@ class TimeSeriesCalibrationTab(CalibrationTab):
             self._paired = result.samples[np.isfinite(result.samples.obs) & np.isfinite(result.samples['mod'])]
             self._context = {'model': frame.meta, 'station': self._obs.station_name,
                 'observation_sources': self._obs.sources, 'observation_derivations': self._obs.derivations,
+                'observation_qaqc': self._obs.qaqc,
                 'variable': col, 'group': group, 'display_unit': self._du.unit(quantity),
                 'start_model_clock': str(start), 'end_model_clock': str(end), 'observation_types': kinds,
                 'pairing_mode': self.combo_mode.currentData(), 'max_gap_hours': self.spin_gap.value(),
@@ -246,6 +332,9 @@ class TimeSeriesCalibrationTab(CalibrationTab):
                 'rating_driver': self.combo_driver.currentData(), 'allow_discharge_extrapolation': self.chk_extrapolate.isChecked(),
                 'power_law_smearing_applied': result.fit is not None and result.fit.form == 'power' and self.chk_smear.isChecked(),
                 'fit': fit_meta, 'measured_statistics': measured, 'rating_reference_statistics': rating,
+                'rating_fit_source': self.combo_fit_source.currentData(), 'manual_points_canonical': list(self._manual_points),
+                'low_flow_filter_enabled': self.btn_low_q.isChecked(),
+                'low_flow_threshold_m3s': float(convert(self.spin_low_q.value(), self._du.unit('discharge'), 'm3/s')),
                 'metric_weighting': 'Each finite pair/step has equal weight; reconstructed steps are not independent measurements.',
                 'notes': result.notes}
             self.btn_export.setEnabled(True)
@@ -290,6 +379,9 @@ class TimeSeriesCalibrationTab(CalibrationTab):
             f'Residual_{unit}': self._du.convert(result.samples.residual.to_numpy(), quantity),
             f'ObservedDischarge_{q_unit}': self._du.convert(result.samples.Q.to_numpy(), 'discharge'),
             'ObservationDateTime': result.samples.index - pd.Timedelta(hours=self.spin_offset.value())}, index=result.samples.index)
+        for column in ('q_is_proxy', 'q_method', 'q_sources', 'q_proxy_recipe', 'q_lag_hours',
+                       'q_proxy_low_m3s', 'q_proxy_high_m3s', 'qaqc_excluded_fields'):
+            if column in result.samples: samples[column] = result.samples[column].to_numpy()
         series.index.name = samples.index.name = 'ModelDateTime'
         try:
             metadata = json.dumps(_json_safe(self._context), indent=2, default=str, allow_nan=False)

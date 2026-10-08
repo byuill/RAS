@@ -88,6 +88,8 @@ stations:
     gage_zero_elev_ft: 184.03
     gage_zero_datum: NAVD88
     parameters:
+      usgs_dv_ssl: [] # candidate query; live coverage not verified
+      usgs_dv_ssc: [] # candidate query; live coverage not verified
       usgs_dv_discharge: [1933-01-01, 2026-10-06]
       usgs_wqp_samples: [1973-07-13, 2024-01-03]
 
@@ -102,6 +104,8 @@ stations:
     lon: -90.9058444
     legacy_ras_station: "433.5"
     parameters:
+      usgs_dv_ssl: [] # candidate query; live coverage not verified
+      usgs_dv_ssc: [] # candidate query; live coverage not verified
       usgs_dv_discharge: [2008-01-01, 2026-10-06]
       usgs_wqp_samples: [1973-04-05, 2008-04-30]
       cwms_flow: [1901-01-02, 2026-09-13]
@@ -125,6 +129,9 @@ stations:
     lon: -91.4187222
     legacy_ras_station: "361.6"
     parameters:
+      usgs_dv_ssl: [] # candidate query; live coverage not verified
+      usgs_dv_ssc: [] # candidate query; live coverage not verified
+      usgs_dv_discharge: [] # candidate query; live coverage not verified
       usgs_wqp_samples: [2008-04-17, 2024-01-26]
 
   - id: USGS-07295025
@@ -138,6 +145,9 @@ stations:
     lat: 31.21625
     lon: -91.6219722
     parameters:
+      usgs_dv_ssl: [] # candidate query; live coverage not verified
+      usgs_dv_ssc: [] # candidate query; live coverage not verified
+      usgs_dv_discharge: [] # candidate query; live coverage not verified
       usgs_wqp_samples: [1991-04-26, 2024-02-06]
 
   - id: USGS-07295100
@@ -153,8 +163,16 @@ stations:
     gage_zero_datum: NGVD29
     ngvd29_to_navd88_shift_ft: null
     parameters:
+      usgs_dv_ssl: [] # candidate query; live coverage not verified
+      usgs_dv_ssc: [] # candidate query; live coverage not verified
+      usgs_dv_discharge: [] # candidate query; live coverage not verified
       usgs_wqp_samples: [1972-09-21, 2024-02-01]
 
+    cwms:
+      office: MVN
+      flow_pattern: ".*Tarbert.*Flow.*"
+      ssc_pattern: ".*Tarbert.*(SSC|Sediment|Conc-Sed).*"
+      ssl_pattern: ".*Tarbert.*(Load-Sed|Sediment-Load|Sed-Load).*"
   - id: USGS-07373290
     site_no: "07373290"
     name: Mississippi River at Red River Landing, LA
@@ -179,6 +197,9 @@ stations:
     lon: -91.3959464
     legacy_ras_station: "267.3"
     parameters:
+      usgs_dv_ssl: [] # candidate query; live coverage not verified
+      usgs_dv_ssc: [] # candidate query; live coverage not verified
+      usgs_dv_discharge: [] # candidate query; live coverage not verified
       usgs_wqp_samples: [1978-06-05, 2024-02-26]
 
   - id: USGS-07374000
@@ -193,6 +214,8 @@ stations:
     gage_zero_elev_ft: 0.0
     gage_zero_datum: NAVD88
     parameters:
+      usgs_dv_ssl: [] # candidate query; live coverage not verified
+      usgs_dv_ssc: [] # candidate query; live coverage not verified
       usgs_dv_discharge: [2004-03-17, 2026-10-06]
       usgs_dv_stage: [1997-07-01, 2026-10-06]
       usgs_wqp_samples: [1975-03-25, 2023-08-24]
@@ -230,6 +253,75 @@ stations:
     gage_zero_elev_ft: -6.58
     gage_zero_datum: NAVD88
     parameters:
+      usgs_dv_ssl: [] # candidate query; live coverage not verified
+      usgs_dv_ssc: [] # candidate query; live coverage not verified
       usgs_dv_discharge: [2008-10-29, 2026-10-06]
       usgs_dv_stage: [2008-10-29, 2026-10-06]
       usgs_wqp_samples: [2006-05-11, 2024-02-28]
+
+  # Additional basin-budget sources. Site identities are established USGS gages;
+  # [] requests the service without asserting an unverified period/parameter record.
+  # Live metadata could not be reached from this cloud environment on 2026-10-08.
+  - id: USGS-03611500
+    site_no: '03611500'
+    name: Ohio River at Metropolis, IL
+    short_name: Ohio at Metropolis
+    river: Ohio
+    parameters: {usgs_dv_discharge: [], usgs_wqp_samples: []}
+    notes: Major input at the Ohio-Mississippi confluence. Do not use a Middle Mississippi gage below the confluence without Ohio inflow and routing.
+  - id: USGS-07077800
+    site_no: '07077800'
+    name: White River at Clarendon, AR
+    short_name: White at Clarendon
+    river: White
+    parameters: {usgs_dv_discharge: [], usgs_wqp_samples: []}
+    notes: Tributary reference, not a measurement at the Mississippi confluence; ungaged lower-basin inflow and floodplain storage remain.
+  - id: USGS-07263620
+    site_no: '07263620'
+    name: Arkansas River at Pendleton, AR
+    short_name: Arkansas at Pendleton
+    river: Arkansas
+    parameters: {usgs_dv_discharge: [], usgs_wqp_samples: []}
+    notes: Major tributary budget source. Do not double count White River flow where a downstream combined channel is used.
+  - id: USGS-07288800
+    site_no: '07288800'
+    name: Yazoo River at Redwood, MS
+    short_name: Yazoo at Redwood
+    river: Yazoo
+    parameters: {usgs_dv_discharge: [], usgs_wqp_samples: []}
+    notes: Yazoo enters upstream of the Vicksburg mainstem reference; never add it again to Vicksburg-based downstream budgets.
+  - id: USGS-07290000
+    site_no: '07290000'
+    name: Big Black River near Bovina, MS
+    short_name: Big Black at Bovina
+    river: Big Black
+    parameters: {usgs_dv_discharge: [], usgs_wqp_samples: []}
+    notes: Mandatory inflow term for the Vicksburg-to-Natchez/Union Point proxy. Gage-to-mouth travel, lower ungaged inflow and storage are not resolved by same-day sums.
+  - id: USGS-07355500
+    site_no: '07355500'
+    name: Red River at Alexandria, LA
+    short_name: Red at Alexandria
+    river: Red
+    parameters: {usgs_dv_discharge: [], usgs_wqp_samples: []}
+    notes: Red River contributes to Atchafalaya flow. Simmesport minus Alexandria is not automatically treated as Old River diversion; routing/storage and remaining inflows must be accounted for.
+  - id: USGS-07381490
+    site_no: '07381490'
+    name: Atchafalaya River at Simmesport, LA
+    short_name: Atchafalaya at Simmesport
+    river: Atchafalaya
+    parameters: {usgs_dv_discharge: [], usgs_dv_ssc: [], usgs_dv_ssl: [], usgs_wqp_samples: []}
+    notes: Contains Red River plus diverted Mississippi flow; not an Old River outflow gage. No fixed 70/30 split is assumed.
+  - id: USGS-07381600
+    site_no: '07381600'
+    name: Lower Atchafalaya River at Morgan City, LA
+    short_name: Atchafalaya at Morgan City
+    river: Atchafalaya
+    parameters: {usgs_dv_discharge: [], usgs_wqp_samples: []}
+    notes: Lower distributary outlet; tidal/backwater effects and Wax Lake partitioning matter.
+  - id: USGS-07381590
+    site_no: '07381590'
+    name: Wax Lake Outlet at Calumet, LA
+    short_name: Wax Lake at Calumet
+    river: Wax Lake Outlet
+    parameters: {usgs_dv_discharge: [], usgs_wqp_samples: []}
+    notes: Separate Atchafalaya distributary outlet; do not treat Morgan City flow as the entire basin outflow.

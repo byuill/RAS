@@ -28,3 +28,14 @@ def test_changed_cache_units_refused_before_modifying_data(tmp_path):
         cache.store('provider','station','flow',frame,'2004-01-01','2004-01-01',units={'value':'m3/s'})
     assert cache.read_meta('provider','station','flow').units=={'value':'cfs'}
     with pytest.raises(CacheError):cache.store('..','..','flow',frame,'2004-01-01','2004-01-01')
+
+
+def test_parser_migration_resets_old_rows_and_old_coverage(tmp_path):
+    cache=ObservationCache(tmp_path)
+    old=pd.DataFrame({'DateTime':pd.to_datetime(['2004-01-01','2005-01-01']), 'value':[1.,2.]})
+    cache.store('usgs_wqp','station','samples',old,'2004-01-01','2005-12-31',revision='old')
+    current=pd.DataFrame({'DateTime':pd.to_datetime(['2004-01-01']), 'value':[3.]})
+    cache.store('usgs_wqp','station','samples',current,'2004-01-01','2004-01-01',revision='new',reset=True)
+    assert cache.lookup('usgs_wqp','station','samples','2004-01-01','2004-01-01').df.value.tolist()==[3.]
+    later=cache.lookup('usgs_wqp','station','samples','2005-01-01','2005-01-01')
+    assert not later.complete and later.df.empty

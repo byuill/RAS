@@ -40,6 +40,11 @@ class UsgsDailyValuesProvider(ObservationProvider):
         pcode, unit, _ = DV_PARAMS[parameter]
         if not station.site_no:
             raise ProviderError(f"{station.short_name} has no USGS site number.")
+        from observations.usgs_api import fetch_values
+        try:
+            return fetch_values(station, pcode, unit, start, end)
+        except ProviderError as exc:
+            logger.info("Modern USGS daily API unavailable; trying legacy NWIS: %s", exc)
         resp = http_get(NWIS_DV, {"format": "json", "sites": station.site_no, "parameterCd": pcode,
                                   "startDT": start.date().isoformat(), "endDT": end.date().isoformat(),
                                   "siteStatus": "all"})
@@ -103,17 +108,19 @@ class UsgsDiscreteSampleProvider(ObservationProvider):
         pcodes = ";".join([PCODE_SSC, PCODE_SSL, PCODE_PCT_FINES, PCODE_Q_INST, PCODE_Q, PCODE_GAGE, PCODE_TEMP])
         resp = http_get(WQP_RESULT, {
             "siteid": f"USGS-{station.site_no}", "pCode": pcodes,
-            "startDateLo": start.strftime("%m-%d-%Y"), "startDateHi": end.strftime("%m-%d-%Y"),
+            "startDateLo": (start-pd.Timedelta(days=1)).strftime("%m-%d-%Y"), "startDateHi": (end+pd.Timedelta(days=1)).strftime("%m-%d-%Y"),
             "mimeType": "csv", "zip": "no", "dataProfile": "narrowResult"}, timeout=180)
         units = {"ssc_mg_l": "mg/L", "ssl_tons_day": "tons/day", "pct_fines": "%", "discharge_cfs": "cfs",
                  "gage_height_ft": "ft", "water_temp_c": "degC"}
         if resp.status_code in (204, 404) or not resp.text.strip():
-            return FetchResult(_empty_samples(), units, WQP_RESULT, ["The Water Quality Portal returned no samples."])
+            return FetchResult(_empty_samples(), units, WQP_RESULT, ["The Water Quality Portal returned no samples."], revision="wqp-units-censoring-v2")
         try:
             raw = pd.read_csv(io.StringIO(resp.text), dtype=str, low_memory=False)
         except (ValueError, pd.errors.ParserError) as exc:
             raise ProviderError("The Water Quality Portal returned a file that could not be parsed.") from exc
-        return FetchResult(parse_wqp_samples(raw), units, WQP_RESULT)
+        return FetchResult(parse_wqp_samples(raw, station.timezone), units, WQP_RESULT,
+            ["WQP units converted per result; detection limits flagged; known UTC/CST/CDT clocks converted to station time."],
+            revision="wqp-units-censoring-v2")
 
 
 def _empty_samples() -> pd.DataFrame:
@@ -122,49 +129,6 @@ def _empty_samples() -> pd.DataFrame:
     return pd.DataFrame({c: [] for c in cols}).astype({"DateTime": "datetime64[ns]"})
 
 
-def parse_wqp_samples(raw: pd.DataFrame) -> pd.DataFrame:
-    """Pivot WQP 'narrowResult' rows (one per parameter) into one row per sample activity."""
-    need = {"ActivityIdentifier", "ActivityStartDate", "USGSPCode", "ResultMeasureValue"}
-    if not need.issubset(raw.columns):
-        raise ProviderError("The Water Quality Portal response is missing expected columns.")
-    df = raw.copy()
-    df["pcode"] = df["USGSPCode"].astype(str).str.replace(r"\.0$", "", regex=True).str.zfill(5)
-    df["val"] = pd.to_numeric(df["ResultMeasureValue"], errors="coerce")
-    df = df[df["pcode"].isin([PCODE_SSC, PCODE_SSL, PCODE_PCT_FINES, PCODE_Q_INST, PCODE_Q, PCODE_GAGE, PCODE_TEMP])]
-    df = df.dropna(subset=["val"])
-    if df.empty:
-        return _empty_samples()
-    tcol = "ActivityStartTime/Time"
-    tz = "ActivityStartTime/TimeZoneCode"
-    df["time_txt"] = df[tcol] if tcol in df.columns else np.nan
-    df["tz_txt"] = df[tz] if tz in df.columns else ""
-    qual = "MeasureQualifierCode"
-    df["qual"] = df[qual].fillna("") if qual in df.columns else ""
-    det = "ResultDetectionConditionText"
-    if det in df.columns:
-        df["qual"] = (df["qual"] + " " + df[det].fillna("")).str.strip()
-    rows = []
-    for (act, date), g in df.groupby(["ActivityIdentifier", "ActivityStartDate"], sort=False):
-        first = g.iloc[0]
-        has_time = isinstance(first["time_txt"], str) and first["time_txt"].strip() != ""
-        stamp = pd.to_datetime(f"{date} {first['time_txt'] if has_time else '00:00:00'}", errors="coerce")
-        if pd.isna(stamp):
-            continue
-
-        def pick(*codes):
-            for c in codes:
-                s = g[g["pcode"] == c]["val"]
-                if len(s):
-                    return float(s.iloc[0])
-            return np.nan
-
-        quals = sorted({q for q in g["qual"] if q})
-        rows.append({
-            "DateTime": stamp, "sample_id": str(act), "ssc_mg_l": pick(PCODE_SSC), "ssl_tons_day": pick(PCODE_SSL),
-            "pct_fines": pick(PCODE_PCT_FINES), "discharge_cfs": pick(PCODE_Q_INST, PCODE_Q),
-            "gage_height_ft": pick(PCODE_GAGE), "water_temp_c": pick(PCODE_TEMP),
-            "time_is_date_only": not has_time, "tz": str(first["tz_txt"]) if isinstance(first["tz_txt"], str) else "",
-            "qualifier": ";".join(quals), "organization": str(first.get("OrganizationIdentifier", "")),
-            "agency": "USGS"})
-    out = pd.DataFrame(rows)
-    return out.sort_values("DateTime").reset_index(drop=True) if not out.empty else _empty_samples()
+def parse_wqp_samples(raw: pd.DataFrame, timezone="America/Chicago") -> pd.DataFrame:
+    from observations.wqp_parser import parse_samples
+    return parse_samples(raw, timezone)

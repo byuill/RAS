@@ -167,9 +167,9 @@ class ObservationCache:
     @_synchronized
     def store(self, provider: str, station_id: str, parameter: str, df: pd.DataFrame, start, end, *,
               station_name: str = "", units: dict | None = None, endpoint: str = "",
-              processing: list[str] | None = None, revision: str = "") -> CacheMeta:
+              processing: list[str] | None = None, revision: str = "", replace_range: bool = False, reset: bool = False) -> CacheMeta:
         """Merge ``df`` (must contain ``DateTime``) into the cache and extend the coverage.  Existing rows are
-        never dropped; rows with the same key are replaced by the newer download."""
+        retained unless replace_range is requested for a complete re-fetch; matching keys are replaced by newer downloads."""
         start, end = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
         cov_end = min(end, pd.Timestamp.now().normalize() - pd.Timedelta(days=RECENT_DAYS))
         pp, jp = self._paths(provider, station_id, parameter)
@@ -186,7 +186,10 @@ class ObservationCache:
             if not same:
                 raise CacheError(f'Observation units changed for {parameter}: {before} to {after}. '
                                  'Clear this station cache before downloading in the new units.')
-        old = pd.read_parquet(pp) if pp.exists() else None
+        old = pd.read_parquet(pp) if pp.exists() and not reset else None
+        if reset: meta.coverage = []
+        if replace_range and old is not None:
+            old = old[(old["DateTime"] < start) | (old["DateTime"] >= end + pd.Timedelta(days=1))]
         new = df.copy()
         if "DateTime" not in new.columns:
             raise CacheError("Internal error: observation table has no DateTime column.")

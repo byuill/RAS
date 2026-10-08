@@ -106,6 +106,12 @@ def to_observation_set(df: pd.DataFrame, mapping: dict[str, ColumnChoice], stati
         raise ObservationError(f"Column '{dt.column}' contains no recognisable dates/times.")
     d = df[ok].copy()
     out = _blank(pd.DatetimeIndex(stamp[ok], name="DateTime"))
+    location = mapping.get("station")
+    if location is not None and location.column is not None:
+        sites = d[location.column].dropna().astype(str).str.strip()
+        if len(sites[sites != ""].unique()) > 1:
+            raise ObservationError("The table contains multiple sampling stations. Filter to one station before importing for calibration/proxy discharge.")
+        out["sample_station_id"] = d[location.column].fillna("").astype(str).to_numpy()
 
     def col(name: str) -> np.ndarray | None:
         ch = mapping.get(name)

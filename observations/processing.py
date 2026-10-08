@@ -20,7 +20,7 @@ OBS_VARIABLES = {
     "pct_fines": ("Percent fines (<0.0625 mm)", "dimensionless"),
     "water_temp_c": ("Water temperature", "temperature"),
 }
-META_COLS = ["kind", "source", "agency", "sample_id", "qualifier", "time_is_date_only"]
+META_COLS = ["kind", "source", "agency", "sample_id", "qualifier", "time_is_date_only", "censored_fields", "sample_timezone"]
 
 
 @dataclass
@@ -32,6 +32,7 @@ class ObservationSet:
     derivations: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     cache_status: list[str] = field(default_factory=list)
+    qaqc: dict = field(default_factory=dict)
 
     def available_variables(self) -> list[str]:
         return [c for c in OBS_VARIABLES if c in self.df.columns and self.df[c].notna().any()]
@@ -101,15 +102,19 @@ def build_observation_set(station: Station, raw: dict[str, tuple[pd.DataFrame, d
             out["qualifier"] = d["qualifier"].values
             out["time_is_date_only"] = d["time_is_date_only"].values
             out["source"] = "USGS WQP discrete sample"
+            out["censored_fields"] = d.get("censored_fields", "")
+            out["sample_timezone"] = d.get("tz", "")
+            derived_fraction = pct.notna() & ssc.notna()
+            out.loc[derived_fraction, "qualifier"] = (out.loc[derived_fraction, "qualifier"].fillna("").astype(str) + " fractions=derived").str.strip()
             if pct.notna().any():
                 derivations.append("Sand/fines concentration = SSC x (1 - %fines/100) / SSC x %fines/100 using USGS pCode 70331 "
                                    "(percent finer than 0.0625 mm).")
         else:
             u = (units or {}).get("value", "")
             val = d["value"].astype(float)
-            out["kind"] = "daily" if param.startswith("usgs_dv") else "cwms"
+            out["kind"] = "daily" if param.startswith("usgs_dv") else "instantaneous" if param == "usgs_iv_discharge" else "cwms"
             out["qualifier"] = d["qualifier"].values if "qualifier" in d.columns else ""
-            if param in ("usgs_dv_discharge", "cwms_flow"):
+            if param in ("usgs_dv_discharge", "usgs_iv_discharge", "cwms_flow"):
                 out["discharge_m3s"] = convert(val.values, u or "cfs", "m3/s")
             elif param in ("usgs_dv_stage", "cwms_stage"):
                 kind = station.cwms.get("stage_kind", "gage_height") if param == "cwms_stage" else "gage_height"
@@ -128,15 +133,14 @@ def build_observation_set(station: Station, raw: dict[str, tuple[pd.DataFrame, d
                     el = _stage_elevation_m(pd.Series(ft, index=d.index), station, notes)
                     if el is not None:
                         out["stage_elev_m"] = el.values
-            elif param == "usgs_dv_ssc":
+            elif param in ("usgs_dv_ssc", "cwms_ssc"):
                 out["ssc_mg_l"] = val.values
-            elif param == "usgs_dv_ssl":
+            elif param in ("usgs_dv_ssl", "cwms_ssl"):
                 out["ssl_kg_s"] = convert(val.values, "tons/day", "kg/s")
-            out["source"] = {"usgs_dv": "USGS NWIS daily value", "cwms": "USACE CWMS"}[
-                "usgs_dv" if param.startswith("usgs_dv") else "cwms"]
+            out["source"] = "USGS NWIS subdaily value" if param == "usgs_iv_discharge" else "USGS NWIS daily value" if param.startswith("usgs_dv") else "USACE CWMS"
             out["agency"] = d["agency"].values if "agency" in d.columns else ""
             out["sample_id"] = ""
-            out["time_is_date_only"] = True
+            out["time_is_date_only"] = param.startswith("usgs_dv")
         if "agency" not in out.columns or out["agency"].isna().all():
             out["agency"] = station.agency
         out["agency"] = out["agency"].fillna(station.agency)

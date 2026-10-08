@@ -22,7 +22,7 @@ VARS = {
     "Sediment Concentration": ("Conc", "concentration"),
 }
 SEDIMENT_VARS = ("Sediment Flux", "Sediment Concentration")
-KINDS = {"Samples": "sample", "Daily values": "daily", "CWMS": "cwms"}
+KINDS = {"Samples": "sample", "Daily values": "daily", "CWMS": "cwms", "Subdaily": "instantaneous"}
 
 STAT_ROWS = [
     ("n_pairs", "Pairs (n)", "{:d}"),
@@ -288,6 +288,7 @@ class CalibrationTab(QWidget):
             "model_file": mf.meta.get("source_hdf"), "plan": mf.meta.get("plan"), "cross_section": mf.meta["xs_label"],
             "variable": label, "sediment_group": group_key, "observation_station": self._obs.station_name,
             "observation_sources": self._obs.sources, "observation_derivations": self._obs.derivations,
+            "observation_qaqc": self._obs.qaqc,
             "observation_types": kinds, "pairing_mode": mode, "max_gap_hours": self.spin_gap.value(),
             "obs_time_offset_hours": self.spin_offset.value(), "start": str(start.date()), "end": str(end.date()),
             "display_unit": unit, "n_observations_in_range": n_obs, "n_pairs": n_pairs, "statistics": stats,

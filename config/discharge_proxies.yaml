@@ -1,0 +1,32 @@
+# River connectivity is explicit: do not substitute a nearby gage across a diversion.
+# Zero configured lag means a same-day budget approximation, not verified travel time.
+# Alternative timing is used only when chronological holdout validation improves.
+stations:
+  USGS-07290880: # Natchez, below the Big Black, above Old River
+    - name: Vicksburg plus Big Black to Natchez
+      terms:
+        - {station: USGS-07289000, coefficient: 1, lag_hours: 0}
+        - {station: USGS-07290000, coefficient: 1, lag_hours: 0}
+      primary_lag_candidates_hours: [0, 12, 24, 36, 48, 60, 72]
+      notes: Big Black inflow is mandatory. Unmeasured smaller tributaries and reach storage are omitted; tributary lag is configurable and unvalidated by default.
+  USGS-07295025: # Union Point, ABOVE Old River Control
+    - name: Vicksburg plus Big Black to Union Point
+      terms:
+        - {station: USGS-07289000, coefficient: 1, lag_hours: 0}
+        - {station: USGS-07290000, coefficient: 1, lag_hours: 0}
+      primary_lag_candidates_hours: [0, 12, 24, 36, 48, 60, 72, 84, 96]
+      notes: Union Point is upstream of Old River diversion. Both flows are required; no zero filling. Smaller lateral inflows, Homochitto routing where relevant, and storage require project review.
+  USGS-07373420: # St. Francisville below Morganza, above Baton Rouge
+    - name: Baton Rouge routed upstream to St. Francisville
+      terms:
+        - {station: USGS-07374000, coefficient: 1, lag_hours: 0}
+      primary_lag_candidates_hours: [0, -6, -12, -18, -24, -36]
+      notes: Both gages are below Old River and Morganza, so these diversions are already reflected in Baton Rouge discharge. Reverse routing neglects storage and smaller lateral gains/losses.
+  USGS-07295100: # Tarbert below Old River but ABOVE Morganza
+    - name: Baton Rouge to Tarbert during assumed closed-Morganza periods
+      terms:
+        - {station: USGS-07374000, coefficient: 1, lag_hours: 0}
+      primary_lag_candidates_hours: [0, -12, -24, -36, -48]
+      blocked_years: [1973, 2011]
+      valid_through: '2024-12-31'
+      notes: Morganza is assumed closed outside its documented 1973/2011 operating years through 2024; this is an explicit assumption, not measured zero flow. Entire operating years and later dates are blocked pending verified diversion records. Homochitto/lateral flow and storage are omitted. Prefer same-site Tarbert flow if available.

@@ -32,6 +32,11 @@ def observed_series(obs_df: pd.DataFrame, var_key: str, group_key: str, kinds: l
             s = pd.Series(dtype=float)
     else:
         s = pd.Series(dtype=float)
+    from observations.qaqc import excluded_mask
+    target = {"Q": "discharge_m3s", "Stage": "stage_elev_m", "Conc": {"total": "ssc_mg_l", "sand": "sand_mg_l", "fines": "fines_mg_l"}.get(group_key),
+              "Flux": "ssl_kg_s" if group_key == "total" else {"sand": "sand_mg_l", "fines": "fines_mg_l"}.get(group_key)}.get(var_key)
+    if len(s) == len(d) and target:
+        s = s.mask(excluded_mask(d, target))
     return s.dropna(), note
 
 

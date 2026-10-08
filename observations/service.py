@@ -14,11 +14,13 @@ from observations.providers import FetchResult, ObservationProvider
 from observations.station_catalog import Station, StationCatalog
 from observations.usace import UsaceCwmsProvider
 from observations.usgs import UsgsDailyValuesProvider, UsgsDiscreteSampleProvider
+from observations.usgs_instantaneous import UsgsInstantaneousProvider
+from observations.discharge_proxy import load_rules, flow_series, fill_discharge
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PARAMETERS = ["usgs_wqp_samples", "usgs_dv_discharge", "usgs_dv_stage", "usgs_dv_ssc", "usgs_dv_ssl",
-                      "cwms_flow", "cwms_stage"]
+                      "cwms_flow", "cwms_stage", "cwms_ssc", "cwms_ssl"]
 
 
 @dataclass
@@ -52,7 +54,7 @@ class ObservationService:
                  providers: list[ObservationProvider] | None = None):
         self.catalog = catalog
         self.cache = cache
-        self.providers = providers or [UsgsDiscreteSampleProvider(), UsgsDailyValuesProvider(), UsaceCwmsProvider()]
+        self.providers = providers or [UsgsDiscreteSampleProvider(), UsgsDailyValuesProvider(), UsaceCwmsProvider(), UsgsInstantaneousProvider()]
 
     def provider_for(self, parameter: str) -> ObservationProvider:
         for p in self.providers:
@@ -64,10 +66,12 @@ class ObservationService:
         return [p for p in DEFAULT_PARAMETERS if station.supports(p)]
 
     def load(self, station: Station, start, end, parameters: list[str] | None = None, refresh: bool = False,
-             progress: Callable[[str], None] | None = None) -> tuple[ObservationSet, LoadReport]:
+             progress: Callable[[str], None] | None = None, derive_discharge: bool = True,
+             include_subdaily: bool = False) -> tuple[ObservationSet, LoadReport]:
         """Load (cache first) every parameter available for ``station`` over [start, end]."""
         start, end = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
-        params = parameters or self.available_parameters(station)
+        params = self.available_parameters(station) if parameters is None else parameters
+        if start > end: raise ValueError("Start date must be on or before end date.")
         report = LoadReport()
         raw: dict[str, tuple[pd.DataFrame, dict]] = {}
         for param in params:
@@ -80,6 +84,9 @@ class ObservationService:
                 else:
                     lk = self.cache.lookup(prov.name, station.id, param, start, end)
                     lk_missing = lk.missing
+                migrate = prov.name == "usgs_wqp" and lk.meta is not None and lk.meta.revision != "wqp-units-censoring-v2"
+                if migrate:
+                    lk_missing = [(start, end)]
                 downloaded = 0
                 notes: list[str] = []
                 for (ms, me) in lk_missing:
@@ -87,7 +94,7 @@ class ObservationService:
                     res: FetchResult = prov.fetch(station, param, ms, me)
                     self.cache.store(prov.name, station.id, param, res.df, ms, me, station_name=station.name,
                                      units=res.units, endpoint=res.endpoint, processing=res.notes,
-                                     revision=res.revision)
+                                     revision=res.revision, replace_range=(param == "usgs_wqp_samples"), reset=migrate)
                     downloaded += len(res.df)
                     notes += res.notes
                 final = self.cache.lookup(prov.name, station.id, param, start, end)
@@ -106,53 +113,51 @@ class ObservationService:
                 report.parameters.append(ParameterReport(param, prov.name, "error", 0, 0, str(exc)))
         obs = build_observation_set(station, raw)
         obs.cache_status = report.lines()
+        for param, (_, _) in raw.items():
+            meta = self.cache.read_meta(self.provider_for(param).name, station.id, param)
+            if meta: obs.notes.extend(meta.processing)
 
-        # --- SPECIAL CASE: UNION POINT SYNTHETIC DISCHARGE ---
-        if station.id == "USGS-07295025":
-            say = progress or (lambda m: None)
-            say("Deriving Union Point discharge from Vicksburg + Big Black River...")
-            try:
-                vick = self.catalog.get("USGS-07289000")
-                try:
-                    bbr = self.catalog.get("USGS-07290000")
-                except Exception:
-                    bbr = Station(id="USGS-07290000", name="Big Black River near Bovina, MS", 
-                                  short_name="Bovina", agency="USGS", site_no="07290000", 
-                                  parameters={"usgs_dv_discharge": [str(start.date()), str(end.date())]})
-                
-                # Fetch Vicksburg flow (try USGS first, then CWMS)
-                vick_obs, _ = self.load(vick, start, end, ["usgs_dv_discharge"], refresh)
-                vick_q = vick_obs.series("discharge_m3s", kinds=["daily"])
-                if vick_q.empty:
-                    vick_obs, _ = self.load(vick, start, end, ["cwms_flow"], refresh)
-                    vick_q = vick_obs.series("discharge_m3s")
 
-                # Fetch Big Black River flow
-                bbr_obs, _ = self.load(bbr, start, end, ["usgs_dv_discharge"], refresh)
-                bbr_q = bbr_obs.series("discharge_m3s", kinds=["daily"])
-
-                if not vick_q.empty and not bbr_q.empty:
-                    vq = vick_q.groupby(vick_q.index.normalize()).mean()
-                    bq = bbr_q.groupby(bbr_q.index.normalize()).mean()
-                    combined = vq.add(bq, fill_value=0).dropna()
-
-                    if not combined.empty and not obs.df.empty:
-                        idx = obs.df.index.normalize()
-                        matched = combined.reindex(idx, method='nearest', tolerance=pd.Timedelta('2D'))
-                        obs.df["discharge_m3s"] = matched.values
-                        obs.derivations.append("Discharge derived as Vicksburg + Big Black River (07290000).")
-
-                        # Re-derive SSL if needed
-                        if "ssc_mg_l" in obs.df.columns and "ssl_kg_s" in obs.df.columns:
-                            both = obs.df["ssc_mg_l"].notna() & obs.df["discharge_m3s"].notna() & obs.df["ssl_kg_s"].isna()
-                            if both.any():
-                                from sediment.units import flux_from_concentration
-                                obs.df.loc[both, "ssl_kg_s"] = flux_from_concentration(
-                                    obs.df.loc[both, "ssc_mg_l"].values,
-                                    obs.df.loc[both, "discharge_m3s"].values
-                                )
-                                obs.df.loc[both, "qualifier"] = (obs.df.loc[both, "qualifier"].fillna("").astype(str) + " ssl=derived(SSCxQ)").str.strip()
-            except Exception as e:
-                logger.warning("Could not derive Union Point discharge: %s", e)
-
+        if derive_discharge and not obs.df.empty:
+            obs = self.enrich_discharge(obs, station, start, end, refresh, include_subdaily, progress)
         return obs, report
+
+    def enrich_discharge(self, obs, station, start, end, refresh=False, include_subdaily=False, progress=None):
+        from dataclasses import replace
+        obs = replace(obs, notes=list(obs.notes), derivations=list(obs.derivations), sources=list(obs.sources))
+        start, end = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
+        sediment_cols = [c for c in ('ssc_mg_l','ssl_kg_s','sand_mg_l','fines_mg_l') if c in obs.df]
+        missing = obs.df[sediment_cols].notna().any(axis=1) & obs.df.discharge_m3s.isna()
+        if missing.any():
+            say = progress or (lambda message: None)
+            local_parameters = [p for p in ('usgs_dv_discharge','cwms_flow') if station.supports(p)]
+            local = obs
+            if local_parameters:
+                local, _ = self.load(station, start-pd.Timedelta(days=2), end+pd.Timedelta(days=2),
+                    local_parameters, refresh, derive_discharge=False)
+            if include_subdaily and station.site_no:
+                # Fetch only days around missing sediment-sample Q, not a multi-decade IV record.
+                days = sorted(set(obs.df.index[missing].normalize()))
+                frames = [local.df]
+                for day in days:
+                    say(f'Loading same-site subdaily Q near {day.date()}...')
+                    iv, iv_report = self.load(station, day-pd.Timedelta(days=1), day+pd.Timedelta(days=1),
+                        ['usgs_iv_discharge'], refresh, derive_discharge=False)
+                    frames.append(iv.df)
+                    obs.notes.extend(iv_report.lines())
+                from dataclasses import replace
+                local = replace(local, df=pd.concat(frames).sort_index())
+            recipes = load_rules().get(station.id, [])
+            flows = {}
+            for source_id in {term['station'] for recipe in recipes for term in recipe['terms']}:
+                source = self.catalog.get(source_id)
+                keys = [p for p in ('usgs_dv_discharge','cwms_flow') if source.supports(p)]
+                if not keys:
+                    obs.notes.append(f'Proxy component {source_id} has no configured flow source.'); continue
+                say(f'Loading required proxy flow from {source.short_name}...')
+                source_obs, source_report = self.load(source, start-pd.Timedelta(days=6), end+pd.Timedelta(days=6),
+                    keys, refresh, derive_discharge=False)
+                flows[source_id] = flow_series(source_obs)
+                obs.notes.extend(f'Proxy {source_id}: {line}' for line in source_report.lines())
+            obs = fill_discharge(obs, local, recipes, flows, local_station_id=station.id)
+        return obs

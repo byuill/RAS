@@ -43,6 +43,16 @@ python main.py
 - Byte-bounded HDF and analysis caches; large matrices read by cross section
 - Background file/cross-section reads and visible integrity/provenance diagnostics
 - Caches observed data in local Parquet files with JSON coverage metadata
+- Expanded lower Mississippi tributary/outlet catalog, modern USGS daily/subdaily
+  adapters, and configurable USACE sediment-series discovery
+- Missing-discharge estimates with mandatory river-budget components and routing
+  provenance; reversible observed-data outlier QA/QC and audit exports
+- Adjustable low-Q filtering (300,000 cfs initial threshold) and rating curves
+  fitted to manually drawn control points
+
+See [observation sources and QA/QC](docs/observation-sources-qaqc.md) for coverage
+verification and discharge-proxy assumptions. New live sources could not be
+verified from the cloud network; parser/routing tests use generated fixtures.
 
 ## Model Assumptions
 - Targets the HEC-RAS 7.x cross-section HDF layout documented in this repository.

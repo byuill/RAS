@@ -9,6 +9,7 @@ import pandas as pd
 from analysis.calibration_metrics import filter_date_range, interpolate_model_to_times
 from analysis.statistics import paired_statistics
 from sediment.units import concentration_from_flux, flux_from_concentration
+from observations.qaqc import excluded_mask
 
 
 @dataclass
@@ -58,7 +59,7 @@ class TransportFunction:
                 'equation_canonical_units': equation}
 
 
-def fit_transport_function(q, sediment, form='power', degree=2):
+def fit_transport_function(q, sediment, form='power', degree=2, min_points=3):
     """Fit positive-flow samples; reject insufficient spread and unstable regressions.
 
     Linear/log/polynomial regressions allow zero sediment. Power regressions use
@@ -76,8 +77,9 @@ def fit_transport_function(q, sediment, form='power', degree=2):
         valid &= y > 0
     n = int(valid.sum())
     order = degree if form == 'polynomial' else 1
-    if n < max(3, order + 2) or len(np.unique(q[valid])) < order + 1:
-        raise ValueError(f'{form.capitalize()} fit needs at least {max(3, order + 2)} valid samples '
+    required = max(min_points, order + (1 if min_points == 2 else 2))
+    if n < required or len(np.unique(q[valid])) < order + 1:
+        raise ValueError(f'{form.capitalize()} fit needs at least {required} valid points '
                          f'and {order + 1} distinct positive discharges ({n}/{len(q)} valid).')
     x = np.log(q[valid]) if form in ('power', 'logarithmic') else q[valid]
     target = np.log(y[valid]) if form == 'power' else y[valid]
@@ -140,7 +142,13 @@ def sediment_records(obs_df, variable, group, kinds):
             y = np.where(np.isfinite(reported), reported, derived)
         else:
             y = derived
-    return pd.DataFrame({'Q': q.to_numpy(float), 'obs': y}, index=d.index)
+    target = ccol if variable == 'Conc' or group != 'total' else 'ssl_kg_s'
+    y = np.where(excluded_mask(d, target), np.nan, y)
+    result = pd.DataFrame({'Q': q.to_numpy(float), 'obs': y}, index=d.index)
+    for column in ('q_is_proxy', 'q_method', 'q_sources', 'q_proxy_recipe', 'q_lag_hours',
+                   'q_proxy_low_m3s', 'q_proxy_high_m3s', 'qaqc_excluded_fields'):
+        if column in d: result[column] = d[column].to_numpy()
+    return result
 
 
 @dataclass
@@ -154,7 +162,7 @@ class TimeSeriesComparison:
 def build_comparison(model, observations, variable='Conc', group='total', kinds=('sample', 'daily', 'cwms'),
                      start=None, end=None, mode='interpolate', max_gap_hours=36, offset_hours=0,
                      form='power', degree=2, driver='observed', extrapolate=False, smear=False,
-                     include_rating=True):
+                     include_rating=True, min_discharge_m3s=None, rating_points=None):
     """Build measured pairs and an optional rating-derived reference on model times.
 
     Observed Q is shifted to the model clock and linearly interpolated with the
@@ -169,6 +177,14 @@ def build_comparison(model, observations, variable='Conc', group='total', kinds=
     samples.index = pd.DatetimeIndex(samples.index) + pd.Timedelta(hours=offset_hours)
     samples = filter_date_range(samples, start, end)
     notes = []
+    if 'q_is_proxy' in samples and samples.q_is_proxy.fillna(False).any():
+        notes.append(f'{samples.q_is_proxy.fillna(False).sum()} sediment records use estimated discharge; inspect Q provenance and QA/QC before interpreting fits.')
+    if min_discharge_m3s is not None:
+        if not np.isfinite(min_discharge_m3s) or min_discharge_m3s < 0:
+            raise ValueError('The low-flow threshold must be finite and nonnegative.')
+        low = np.isfinite(samples.Q) & (samples.Q < min_discharge_m3s)
+        samples = samples[~low].copy()
+        notes.append(f'{low.sum()} low-Q measurements excluded from this tab only; missing-Q measurements retained. Raw observations remain unchanged.')
     if variable == 'Flux':
         notes.append('Loads use reported total load where available, otherwise concentration × same-record discharge.'
                      if group == 'total' else 'Fraction loads are derived from fraction concentration × same-record discharge.')
@@ -181,7 +197,12 @@ def build_comparison(model, observations, variable='Conc', group='total', kinds=
     fit = None
     if include_rating:
         try:
-            fit = fit_transport_function(samples.Q.to_numpy(), samples.obs.to_numpy(), form, degree)
+            if rating_points is not None:
+                points = np.asarray(rating_points, float).reshape(-1, 2)
+                fit = fit_transport_function(points[:, 0], points[:, 1], form, degree, min_points=2)
+                notes.append('Rating function fitted to manually drawn control points, not observed measurements; fit diagnostics describe control points only.')
+            else:
+                fit = fit_transport_function(samples.Q.to_numpy(), samples.obs.to_numpy(), form, degree)
         except ValueError as exc:
             notes.append(f'Rating curve unavailable: {exc}')
         if fit is not None:
@@ -199,6 +220,8 @@ def build_comparison(model, observations, variable='Conc', group='total', kinds=
                 q = q.groupby(level=0).mean().sort_index()
                 series['rating_q'] = interpolate_model_to_times(q, series.index, 'interpolate', max_gap_hours).to_numpy()
                 notes.append('Rating reference uses observed discharge interpolated to model times; no time extrapolation.')
+                if 'q_is_proxy' in observations and observations.q_is_proxy.fillna(False).any():
+                    notes.append('The observation-set hydrograph also contains proxy discharge estimates; it is not entirely measured.')
             predictions = fit.predict(series.rating_q.to_numpy(), extrapolate, smear)
             series['reference'] = predictions
             notes.append(f'Fit uses {fit.n_used}/{fit.n_total} records; '

@@ -33,6 +33,7 @@ class Station:
     legacy_ras_station: str = ""
     notes: str = ""
     endpoints: dict[str, str] = field(default_factory=dict)
+    timezone: str = "America/Chicago"
 
     @property
     def label(self) -> str:
@@ -43,9 +44,14 @@ class Station:
         if parameter in self.parameters:
             return True
         if parameter == "cwms_flow":
-            return "flow" in self.cwms
+            return "flow" in self.cwms or "flow_pattern" in self.cwms
         if parameter == "cwms_stage":
-            return "stage" in self.cwms
+            return "stage" in self.cwms or "stage_pattern" in self.cwms
+        if parameter in ("cwms_ssc", "cwms_ssl"):
+            key = "ssc" if parameter == "cwms_ssc" else "ssl"
+            return key in self.cwms or key + "_pattern" in self.cwms
+        if parameter == "usgs_iv_discharge":
+            return bool(self.site_no)
         return False
 
 
@@ -64,6 +70,7 @@ def _to_station(d: dict) -> Station:
             site_no=str(d.get("site_no", "")), river=d.get("river", "Mississippi"),
             river_mile=d.get("river_mile"), river_mile_basis=d.get("river_mile_basis", ""),
             lat=d.get("lat"), lon=d.get("lon"), parameters=params, cwms=d.get("cwms") or {},
+            timezone=d.get("timezone", "America/Chicago"),
             gage_zero_elev_ft=d.get("gage_zero_elev_ft"), gage_zero_datum=d.get("gage_zero_datum", ""),
             ngvd29_to_navd88_shift_ft=d.get("ngvd29_to_navd88_shift_ft"),
             legacy_ras_station=str(d.get("legacy_ras_station", "") or ""), notes=d.get("notes", ""))

@@ -118,6 +118,10 @@ and hydraulic unit conversion is supported, but this review's target is US custo
 
 ## Observations and calibration
 
+See [lower Mississippi sources, discharge proxies and observation QA/QC](observation-sources-qaqc.md)
+for the expanded catalog, provider verification, routing assumptions, outlier
+review, reversible exclusions and audit exports.
+
 Import a CSV/Excel table or use the station providers. Inspect the detected
 columns and units. Recognized parenthesized units are respected, including
 `m³/s` and `L/s`; unsupported/incompatible declared units are refused. Bare
@@ -246,6 +250,40 @@ Log plots omit nonpositive values; metrics retain every finite pair.
   options, notes, and both sets of comparison metrics.
 
 The Matplotlib toolbar exports the displayed figure as PNG, SVG or PDF.
+
+### Low-flow filtering and manually drawn rating curves
+
+Use **Exclude low-Q measurements** to omit measurements with registered Q below
+the selected threshold from this tab's rating fit and measured-pair metrics.
+The initial threshold is **300,000 cfs**, converted if your display uses another
+discharge unit. The filter is inactive until clicked. Adjust the threshold at
+any time; click **Restore low-Q measurements** to undo it. Unknown-Q records
+remain available for concentration comparisons, but cannot fit a Q rating curve.
+This filter changes only this tab, not the provider cache or the observation
+set used by other tabs. Registered Q can include explicitly labeled proxy values.
+It does not filter the continuous discharge driver or user-drawn controls.
+
+To define a curve manually, select the function, click **Draw points**, and
+left-click the **Observed rating curve** plot. Turn off toolbar pan/zoom first.
+Green stars mark your control points and **Fit to: Drawn control points** uses
+those points in place of measured samples for the regression. The fit updates
+as points are added; at least two distinct positive-Q points are required for
+linear/power/log functions, or `degree+1` for a polynomial. The existing
+minimum-record checks still apply to a fit from actual measurements.
+
+**Undo point** removes the last point; **Clear points** removes all controls.
+Turning off Draw points stops editing while retaining the manual curve. Change
+**Fit to** back to **Observed measurements** to resume measurement-based fitting.
+Controls are cleared when the model/cross section/variable/group or observation
+set changes, so concentration control points cannot become load control points.
+Low-flow filtering remains independently selectable.
+
+Manual curves still use the selected observed/model discharge driver to build
+the reference time series. Measured-pair metrics continue to compare actual
+measurements with simulated output. Manual fit R²/RMSE describe the **drawn
+controls**, not goodness of fit to observed measurements. Exported metadata
+records the fit source, all control points in canonical units, threshold and
+whether the low-flow filter is enabled.
 
 ## Inspect or share metadata without the large results
 
