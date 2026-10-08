@@ -130,11 +130,11 @@ def _discover_variables(grp: h5py.Group, n_classes: int) -> dict[str, VariableIn
         ds = grp[nm]
         m = _SUFFIX.match(nm)
         is_class = False
-        if m and m.group("base") in nameset:
+        if m:
             base, k = m.group("base"), int(m.group("k"))
             gc = _attr_text(ds, "Grain Class")
             # per-class datasets carry the class number in 'Grain Class' (the base carries 'All')
-            if (gc == str(k) or gc.lower() == "all") and (n_classes == 0 or k <= n_classes):
+            if k > 0 and (gc == str(k) or (gc.lower() == "all" and base in nameset)) and (n_classes == 0 or k <= n_classes):
                 info = variables.setdefault(base, VariableInfo(base, "", None, {}, "All", tuple(ds.shape)))
                 info.class_paths[k] = f"{grp.name}/{nm}".lstrip("/")
                 is_class = True
@@ -145,6 +145,8 @@ def _discover_variables(grp: h5py.Group, n_classes: int) -> dict[str, VariableIn
         probe = info.total_path or next(iter(info.class_paths.values()))
         info.units = _attr_text(grp.file[probe], "Units", "")
         info.grain_class_attr = info.grain_class_attr or _attr_text(grp.file[probe], "Grain Class")
+    if not variables:
+        raise HdfStructureError('The cross-section results group contains no two-dimensional result datasets.')
     return variables
 
 

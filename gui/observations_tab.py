@@ -12,7 +12,6 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QPlainTextEdit, QPushButton,
                                QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
-from gui.workers import TaskWorker
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +112,9 @@ class ObservationsTab(QWidget):
 
     def set_model(self, mds, xs_index):
         """Called when a model file is (re)loaded."""
+        self._workers.invalidate('obs')
+        self._workers.invalidate('obs_all')
+        self._set_busy(False)
         self._mds = mds
         self._xs_index = xs_index
         self._update_mapping()
@@ -182,13 +184,9 @@ class ObservationsTab(QWidget):
         self.txt_info.setPlainText(f"Loading {station.label}, {start.date()} to {end.date()} "
                                    f"({'forced re-download' if refresh else 'cache first'}) ...")
         self._set_busy(True)
-        token = self._workers.next_token("obs")
-        worker = TaskWorker(token, self._service.load, station, start, end, None, refresh)
-        worker.signals.finished.connect(self._on_loaded)
-        worker.signals.error.connect(self._on_load_error)
-        self._pending[token] = worker
-        from PySide6.QtCore import QThreadPool
-        QThreadPool.globalInstance().start(worker)
+        token = self._workers.submit('obs',self._service.load,
+            lambda result:self._on_loaded((token,result)),
+            lambda error:self._on_load_error((token,error)),station,start,end,None,refresh)
 
     def _on_loaded(self, payload):
         token, (obs, report) = payload
@@ -222,7 +220,6 @@ class ObservationsTab(QWidget):
         self.txt_info.setPlainText(f"Loading ALL stations, {start.date()} to {end.date()} "
                                    f"({'forced re-download' if refresh else 'cache first'}) ...")
         self._set_busy(True)
-        token = self._workers.next_token("obs_all")
         
         def worker_func():
             results = []
@@ -234,12 +231,9 @@ class ObservationsTab(QWidget):
                     results.append((st, None, None, str(exc)))
             return results
             
-        worker = TaskWorker(token, worker_func)
-        worker.signals.finished.connect(self._on_load_all_finished)
-        worker.signals.error.connect(self._on_load_all_error)
-        self._pending[token] = worker
-        from PySide6.QtCore import QThreadPool
-        QThreadPool.globalInstance().start(worker)
+        token = self._workers.submit('obs_all',worker_func,
+            lambda result:self._on_load_all_finished((token,result)),
+            lambda error:self._on_load_all_error((token,error)))
 
     def _on_load_all_finished(self, payload):
         token, results = payload

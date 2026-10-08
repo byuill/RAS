@@ -53,12 +53,12 @@ class UnitDef:
 
 
 QUANTITIES = ("discharge", "length", "velocity", "shear_stress", "concentration",
-              "mass_flux", "mass", "diameter", "temperature", "dimensionless")
+              "mass_flux", "mass", 'volume', "diameter", "temperature", "dimensionless")
 
 CANONICAL = {
     "discharge": "m3/s", "length": "m", "velocity": "m/s", "shear_stress": "Pa",
     "concentration": "mg/L", "mass_flux": "kg/s", "mass": "kg", "diameter": "mm",
-    "temperature": "degC", "dimensionless": "1",
+    "temperature": "degC", "dimensionless": "1", 'volume':'m3',
 }
 
 _DEFS: dict[str, UnitDef] = {}
@@ -70,6 +70,7 @@ def _add(name: str, quantity: str, factor: float, offset: float = 0.0, label: st
 
 _add("m3/s", "discharge", 1.0, label="m\u00b3/s")
 _add("cfs", "discharge", M3_PER_CFS, label="cfs")
+_add('L/s','discharge',0.001)
 _add("m", "length", 1.0)
 _add("ft", "length", M_PER_FT)
 _add("m/s", "velocity", 1.0)
@@ -87,6 +88,8 @@ _add("tons/day", "mass_flux", KG_PER_SHORT_TON / SECONDS_PER_DAY, label="tons/da
 _add("tonnes/year", "mass_flux", KG_PER_TONNE / (SECONDS_PER_DAY * DAYS_PER_YEAR), label="tonnes/yr (metric)")
 _add("tons/year", "mass_flux", KG_PER_SHORT_TON / (SECONDS_PER_DAY * DAYS_PER_YEAR), label="tons/yr (short)")
 _add("kg", "mass", 1.0)
+_add('m3','volume',1.0)
+_add('ft3','volume',M3_PER_FT3)
 _add("tonnes", "mass", KG_PER_TONNE, label="tonnes (metric)")
 _add("tons", "mass", KG_PER_SHORT_TON, label="tons (short)")
 _add("mm", "diameter", 1.0)
@@ -98,6 +101,7 @@ _add("1", "dimensionless", 1.0, label="-")
 # Strings found in HEC-RAS "Units" attributes (US customary and SI) and common observation files.
 _ALIASES = {
     "cfs": "cfs", "ft3/s": "cfs", "ft^3/s": "cfs", "cubic feet per second": "cfs",
+    'l/s':'L/s',
     "m3/s": "m3/s", "m^3/s": "m3/s", "cms": "m3/s", "cubic meters per second": "m3/s",
     "ft": "ft", "feet": "ft", "foot": "ft", "m": "m", "meter": "m", "meters": "m",
     "ft/s": "ft/s", "fps": "ft/s", "m/s": "m/s",
@@ -110,6 +114,7 @@ _ALIASES = {
     "tons/year": "tons/year", "tonnes/year": "tonnes/year",
     "kg": "kg", "tons": "tons", "ton": "tons", "tonnes": "tonnes", "tonne": "tonnes",
     "mm": "mm",
+    'm3':'m3','m^3':'m3','ft3':'ft3','ft^3':'ft3','cu ft':'ft3',
     "f": "degF", "degf": "degF", "\u00b0f": "degF", "c": "degC", "degc": "degC", "\u00b0c": "degC",
     "none": "1", "": "1", "-": "1", "fraction": "1", "1": "1",
 }
@@ -120,6 +125,7 @@ def normalize_unit(unit: str | bytes | None) -> str:
     if isinstance(unit, bytes):
         unit = unit.decode("utf-8", "replace")
     key = (unit or "").strip().lower()
+    key = key.replace('\u00b3','3').replace('\u00b2','2')
     key = key.replace("sq ", "sq").replace("sq.", "sq").replace(" ", " ")
     key = re.sub(r"\s+", " ", key)
     compact = key.replace(" ", "")
@@ -182,11 +188,11 @@ def flux_from_concentration(conc_mg_l, q_m3s):
 
 
 def concentration_from_flux(flux_kg_s, q_m3s):
-    """Concentration (mg/L) = flux (kg/s) * 1000 / Q (m3/s); NaN where Q <= 0 (undefined)."""
+    """Concentration from signed flux/discharge; zero or nonfinite Q is undefined."""
     q = np.asarray(q_m3s, dtype=float)
     f = np.asarray(flux_kg_s, dtype=float)
     out = np.full(np.broadcast(f, q).shape, np.nan)
-    ok = q > 0
+    ok = np.isfinite(q) & (q != 0)
     np.divide(f * G_PER_KG, q, out=out, where=ok)
     return out
 

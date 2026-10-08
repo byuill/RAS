@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+cache/
+logs/
+output/
+*.[hH][dD][fF]
+# Per-machine preferences and mappings (existing tracked copies remain untouched).
+config/app_config.json
+config/station_mappings.json
+config/stations_user.yaml

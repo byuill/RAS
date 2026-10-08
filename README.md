@@ -1,9 +1,16 @@
 # HEC-RAS Sediment Calibration Workbench
 
-A desktop PySide6 application for analyzing, inspecting, and calibrating HEC-RAS sediment transport models.
+A desktop PySide6 application for analyzing, inspecting, and calibrating HEC-RAS
+quasi-unsteady **1-D sediment** plan results.
 
 ## Purpose
-The workbench simplifies the comparison of HEC-RAS 2D/1D sediment output against observed USGS and USACE data. It calculates derived quantities like sediment load, handles grain class aggregation, and produces presentation-ready plots.
+The workbench compares cross-section sediment output with observed USGS/USACE
+data or local tables. It derives class mass flux from concentration and discharge,
+handles grain-class aggregation, and produces plots and calibration diagnostics.
+This reader does not implement 2-D cell/face sediment result analysis.
+
+See the [large-file user guide and validation notes](docs/user-guide.md) for memory
+settings, interpretation limits and inspecting an HDF without sharing result arrays.
 
 ## Installation
 1. Create a virtual environment:
@@ -29,8 +36,24 @@ python main.py
 - Plot Time Series and Rating Curves
 - Export plots (PNG, SVG, PDF) and CSV data
 - Calibrate model vs observed data
-- Caches observed data via local SQLite/Parquet for performance
+- Byte-bounded HDF and analysis caches; large matrices read by cross section
+- Background file/cross-section reads and visible integrity/provenance diagnostics
+- Caches observed data in local Parquet files with JSON coverage metadata
 
 ## Model Assumptions
-- Assumes sediment concentrations are recorded in HDF output.
-- HEC-RAS version >= 6.0 results format.
+- Targets the HEC-RAS 7.x cross-section HDF layout documented in this repository.
+  Fallback discovery supports some related layouts; other versions need verification.
+- Uses per-class concentrations, or per-class volume-out with known US customary
+  class unit weights. Rates reconstructed from output snapshots are estimates.
+- Rouse classifications are estimates of transport mode, not measured suspended/bed-load fractions.
+- The regression suite uses generated HDF fixtures, including a sparse 2 GB logical
+  result dataset. Real project compatibility has not been verified in this review.
+
+## Tests
+
+```bash
+python -m pip install pytest
+python -m pytest -q
+```
+
+Tests create small temporary files; no large model files are required or committed.

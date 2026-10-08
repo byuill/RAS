@@ -110,4 +110,4 @@ class RasModelInfo:
 
     def timestep_days(self) -> np.ndarray:
         """Seconds between successive output times, expressed in days (length n_steps-1)."""
-        return np.diff(self.times.values).astype("timedelta64[s]").astype(float) / 86400.0
+        return np.diff(self.times.asi8).astype(float) / (86400.0 * 1e9)

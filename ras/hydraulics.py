@@ -11,21 +11,21 @@ from core.exceptions import MissingVariableError
 from ras import variable_names as V
 from ras.hdf_reader import RasResults
 from sediment.rouse import RHO_WATER_DEFAULT
-from sediment.units import G_ACCEL_SI, convert, to_canonical
+from sediment.units import G_ACCEL_SI, CANONICAL, convert, quantity_of
 
 logger = logging.getLogger(__name__)
 
 SENTINEL_LOW = -9998.0   # HEC-RAS "undefined" sentinels (-9999, -3.4e38 ...) are all below this
 SENTINEL_HIGH = 1e12
 
-NONNEGATIVE = {V.FLOW, V.VELOCITY, V.SHEAR_STRESS, V.SHEAR_VELOCITY, V.CONCENTRATION, V.FALL_VELOCITY}
+NONNEGATIVE = {V.SHEAR_STRESS, V.SHEAR_VELOCITY, V.CONCENTRATION, V.FALL_VELOCITY}
 
 
 def sanitize(arr: np.ndarray, name: str, warnings: list[str], nonneg: bool | None = None,
              negative_policy: str = "nan") -> np.ndarray:
     """Replace sentinels / non-physical values with NaN; counts are appended to ``warnings``."""
     a = np.asarray(arr, dtype=float).copy()
-    bad = ~np.isfinite(a) | (a <= SENTINEL_LOW) | (a >= SENTINEL_HIGH)
+    bad = ~np.isfinite(a) | np.isclose(a, -9999.0, rtol=0, atol=0.001) | (np.abs(a) >= 1e30)
     n_bad = int(bad.sum())
     a[bad] = np.nan
     nonneg = (name in NONNEGATIVE) if nonneg is None else nonneg
@@ -60,11 +60,11 @@ def _read(res: RasResults, name: str, xs_index: int, warnings: list[str], neg_po
     path = res.variable_path(name)
     units = res.var_units(name)
     raw = sanitize(res.column(path, xs_index), name, warnings, negative_policy=neg_policy)
-    return raw, f"HEC-RAS output: {path} [{units or 'dimensionless'}]"
+    return raw, f"HEC-RAS output: {path} [{units or 'Units attribute missing'}]"
 
 
 def read_hydraulics(res: RasResults, xs_index: int) -> HydraulicSeries:
-    negative_policy = "nan"  # hydraulic quantities are never negative; negative sediment values are handled separately
+    negative_policy = 'nan'  # Flow and velocity may be signed; stress/speed must be nonnegative.
     warnings: list[str] = []
     prov: dict[str, str] = {}
     info = res.info
@@ -72,20 +72,20 @@ def read_hydraulics(res: RasResults, xs_index: int) -> HydraulicSeries:
     q_raw, p = _read(res, V.FLOW, xs_index, warnings, negative_policy)
     if q_raw is None:
         raise MissingVariableError("Flow discharge is not stored in this HDF file; the tool cannot continue.")
-    q = to_canonical(q_raw, res.var_units(V.FLOW) or "cfs")
+    q = convert(q_raw, result_unit(res,V.FLOW,'discharge',warnings), 'm3/s')
     prov["discharge"] = p
 
-    def conv(name: str, quantity_default_unit: str):
+    def conv(name: str, quantity: str):
         raw, pr = _read(res, name, xs_index, warnings, negative_policy)
         if raw is None:
             return None, ""
-        return to_canonical(raw, res.var_units(name) or quantity_default_unit), pr
+        return convert(raw, result_unit(res,name,quantity,warnings), CANONICAL[quantity]), pr
 
-    stage, prov["stage"] = conv(V.WSE, "ft")
-    vel, prov["velocity"] = conv(V.VELOCITY, "ft/s")
-    ustar, prov["shear_velocity"] = conv(V.SHEAR_VELOCITY, "ft/s")
-    temp, prov["temperature"] = conv(V.TEMPERATURE, "degF")
-    tau, prov["shear_stress"] = conv(V.SHEAR_STRESS, "lb/ft2")
+    stage, prov["stage"] = conv(V.WSE, 'length')
+    vel, prov["velocity"] = conv(V.VELOCITY, 'velocity')
+    ustar, prov["shear_velocity"] = conv(V.SHEAR_VELOCITY, 'velocity')
+    temp, prov["temperature"] = conv(V.TEMPERATURE, 'temperature')
+    tau, prov["shear_stress"] = conv(V.SHEAR_STRESS, 'shear_stress')
     if stage is None:
         prov.pop("stage")
         warnings.append("Water-surface elevation is not stored in this file; stage plots are disabled.")
@@ -118,7 +118,28 @@ def _derive_shear_stress(res: RasResults, xs_index: int, ustar_si, warnings, neg
     r_raw, _ = _read(res, V.HYDRAULIC_RADIUS, xs_index, warnings, neg_policy)
     s_raw, _ = _read(res, V.ENERGY_SLOPE, xs_index, warnings, neg_policy)
     if r_raw is not None and s_raw is not None:
-        r = to_canonical(r_raw, res.var_units(V.HYDRAULIC_RADIUS) or "ft")
+        r = convert(r_raw,result_unit(res,V.HYDRAULIC_RADIUS,'length',warnings),'m')
         gamma = RHO_WATER_DEFAULT * G_ACCEL_SI
         return gamma * r * np.where(s_raw >= 0, s_raw, np.nan), "DERIVED: gamma R S (hydraulic radius x slope)"
     return None, ""
+
+
+def result_unit(res, name, quantity, warnings, class_index=None):
+    """Validate dimensions, inferring missing units only from a known model unit system."""
+    from core.exceptions import UnitError
+    unit = res.var_units(name, class_index)
+    if not unit:
+        system = res.info.units_system.lower()
+        if system in ('si','metric'):
+            defaults = {'discharge':'m3/s','length':'m','velocity':'m/s','temperature':'degC',
+                        'shear_stress':'Pa','concentration':'mg/L','mass_flux':'tonnes/day','volume':'m3'}
+        elif 'english' in system or 'customary' in system or system in ('us','imperial'):
+            defaults = {'discharge':'cfs','length':'ft','velocity':'ft/s','temperature':'degF',
+                        'shear_stress':'lb/ft2','concentration':'mg/L','mass_flux':'tons/day','volume':'ft3'}
+        else:
+            raise UnitError(f"'{name}' has no units and the model unit system is unknown; verify its HDF metadata.")
+        unit = defaults[quantity]
+        warnings.append(f"'{name}' has no Units attribute; using {unit} from model unit system {res.info.units_system}.")
+    if quantity_of(unit) != quantity:
+        raise UnitError(f"'{name}' declares {unit}; expected {quantity} units.")
+    return unit

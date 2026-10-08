@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from core.exceptions import AnalysisError
+from core.cache import BoundedCache
 from ras.hdf_reader import RasResults
 from ras.hydraulics import HydraulicSeries, read_hydraulics
 from ras.sediment import ClassTransport, read_class_transport
@@ -39,32 +40,43 @@ class ModelFrame:
 
 class ModelDataService:
     def __init__(self, res: RasResults, sand_min_mm: float = 0.063, negative_policy: str = "keep",
-                 drop_initial_step: bool = True):
+                 drop_initial_step: bool = True, cache_mb: float = 128.0, rouse_cfg: RouseConfig | None = None,
+                 analysis_settings=None):
+        if not np.isfinite(sand_min_mm) or not 0 < sand_min_mm < 2:
+            raise ValueError('The fines/sand cutoff must lie between 0 and 2 mm.')
+        if negative_policy not in ('keep','nan','zero'):
+            raise ValueError('Negative concentration policy must be keep, nan or zero.')
         self.res = res
         self.sand_min_mm = sand_min_mm
         self.negative_policy = negative_policy
         self.drop_initial_step = drop_initial_step
         self._lock = threading.RLock()
-        self._hyd: dict[int, HydraulicSeries] = {}
-        self._trans: dict[tuple, ClassTransport] = {}
-        self._frames: dict[tuple, ModelFrame] = {}
+        self.rouse_cfg = rouse_cfg or RouseConfig()
+        self.analysis_settings = analysis_settings
+        self._cache = BoundedCache(cache_mb)
 
     # -- groups --------------------------------------------------------------------------------
     def set_negative_policy(self, policy: str) -> None:
+        if policy not in ('keep','nan','zero'):
+            raise ValueError('Negative concentration policy must be keep, nan or zero.')
         with self._lock:
             if policy != self.negative_policy:
                 self.negative_policy = policy
-                self._trans.clear()
-                self._frames.clear()
+                self._cache.clear()
 
     @property
     def rouse_reason(self) -> str:
         info = self.res.info
-        if info.has_class_variable("Rouse #"):
+        stored = info.layout.variables.get('Rouse #')
+        if self.rouse_cfg.source == 'hecras' and stored and all(c.index in stored.class_paths for c in info.grain_classes):
             return ""
+        if any(not np.isfinite(c.d_rep_mm) or c.d_rep_mm <= 0 for c in info.grain_classes):
+            return 'valid grain diameters are needed to compute Rouse numbers'
         if info.has_variable("Shear Velocity") or info.has_variable("Shear Stress"):
             return ""
-        return "needs HEC-RAS 'Rouse #' or shear velocity/stress results, none are stored in this file"
+        if info.has_variable('Hydraulic Radius') and info.has_variable('Slope'):
+            return ''
+        return 'needs complete stored Rouse numbers or shear velocity/stress (or radius and slope) for the selected source'
 
     def groups(self) -> list[SedimentGroup]:
         return build_groups(self.res.info.grain_classes, self.sand_min_mm, not self.rouse_reason, self.rouse_reason)
@@ -78,24 +90,26 @@ class ModelDataService:
     # -- cached building blocks ----------------------------------------------------------------
     def hydraulics(self, xs_index: int) -> HydraulicSeries:
         with self._lock:
-            if xs_index not in self._hyd:
-                self._hyd[xs_index] = read_hydraulics(self.res, xs_index)
-            return self._hyd[xs_index]
+            key = ('hyd',xs_index)
+            found = self._cache.get(key)
+            return found if found is not None else self._cache.put(key,read_hydraulics(self.res,xs_index))
 
     def transport(self, xs_index: int, cfg: RouseConfig) -> ClassTransport:
-        key = (xs_index, cfg.source, cfg.kappa, cfg.ferguson_c1, cfg.ferguson_c2)
+        key = ('transport',xs_index,cfg.source,cfg.kappa,cfg.ferguson_c1,cfg.ferguson_c2)
         with self._lock:
-            if key not in self._trans:
-                self._trans[key] = read_class_transport(
-                    self.res, xs_index, self.hydraulics(xs_index), cfg, self.negative_policy, self.drop_initial_step)
-            return self._trans[key]
+            found = self._cache.get(key)
+            if found is None:
+                found = self._cache.put(key,read_class_transport(
+                    self.res, xs_index, self.hydraulics(xs_index), cfg, self.negative_policy, self.drop_initial_step))
+            return found
 
     # -- public --------------------------------------------------------------------------------
     def frame(self, xs_index: int, group_key: str, cfg: RouseConfig) -> ModelFrame:
-        key = (xs_index, group_key, cfg.key())
+        key = ('frame',xs_index,group_key,cfg.key())
         with self._lock:
-            if key in self._frames:
-                return self._frames[key]
+            found = self._cache.get(key)
+            if found is not None:
+                return found
         hyd = self.hydraulics(xs_index)
         tr = self.transport(xs_index, cfg)
         group = self.group(group_key)
@@ -134,7 +148,7 @@ class ModelDataService:
         }
         mf = ModelFrame(df, meta)
         with self._lock:
-            self._frames[key] = mf
+            self._cache.put(key,mf)
         return mf
 
     def class_flux_frame(self, xs_index: int, cfg: RouseConfig) -> pd.DataFrame:
@@ -170,3 +184,8 @@ class ModelDataService:
     def concentration_from_flux_check(self, mf: ModelFrame) -> np.ndarray:
         """Re-derive concentration from flux/Q for verification (should equal ``Conc``)."""
         return concentration_from_flux(mf.df["Flux"].values, mf.df["Q"].values)
+
+    def close(self):
+        with self._lock:
+            self._cache.clear()
+            self.res.close()

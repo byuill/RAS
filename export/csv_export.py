@@ -29,7 +29,9 @@ def export_model_frame(mf: ModelFrame, path: str | Path, du: DisplayUnits) -> No
     out["SedimentFlux"] = du.convert(df["Flux"], "mass_flux")
     out["SedimentConcentration"] = du.convert(df["Conc"], "concentration")
     
-    # Drop dt_days or ShearVelocity if not needed, but they are useful. We stick to the TODO columns.
+    out['dt_days'] = df['dt_days']
+    out[f"ShearVelocity_{du.label('velocity')}"] = du.convert(df['ShearVelocity'],'velocity')
+    out['Temperature_degC'] = df['Temperature']
     out["Source"] = mf.meta.get("source_hdf", "")
     
     # Append unit names to columns

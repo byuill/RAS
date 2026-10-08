@@ -19,7 +19,9 @@ def sum_classes(values: np.ndarray, class_positions: list[int]) -> np.ndarray:
     """Sum selected columns (0-based positions) of a (time x class) array."""
     if not class_positions:
         return np.full(values.shape[0], np.nan)
-    return nansum_min1(values[:, class_positions], axis=1)
+    selected = values[:, class_positions]
+    # A partial sum is not a complete sand/fines/total load.
+    return np.where(np.isfinite(selected).all(axis=1), selected.sum(axis=1), np.nan)
 
 
 def rouse_mask(p: np.ndarray, group_key: str, cfg: RouseConfig) -> np.ndarray:
@@ -54,5 +56,6 @@ def aggregate(values: np.ndarray, class_indices: list[int], group: SedimentGroup
     out = np.where(mask & usable, values, 0.0).sum(axis=1)
     out = np.where(usable.any(axis=1), out, np.nan)
     # Rouse number invalid for a class that carries sediment: the partition is unknown, not zero.
-    unknown = (np.isnan(rouse) & usable & (values > 0)).any(axis=1)
+    unknown = ((np.isnan(rouse) | (rouse < 0)) & usable & (values != 0)).any(axis=1)
+    unknown |= (mask & ~usable).any(axis=1)
     return np.where(unknown, np.nan, out)

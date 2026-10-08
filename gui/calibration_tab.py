@@ -58,6 +58,8 @@ class CalibrationTab(QWidget):
         self.combo_var = QComboBox()
         self.combo_var.addItems(list(VARS))
         self.combo_group = QComboBox()
+        self.combo_group.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_group.setMinimumContentsLength(24)
         self.combo_mode = QComboBox()
         self.combo_mode.addItem("Interpolate in time", "interpolate")
         self.combo_mode.addItem("Nearest model step", "nearest")
@@ -149,6 +151,8 @@ class CalibrationTab(QWidget):
             for g in mds.groups():
                 self.combo_group.addItem(g.label, g.key)
                 self.combo_group.setItemData(self.combo_group.count() - 1, g.description, Qt.ToolTipRole)
+                if g.kind == 'rouse' and mds.rouse_reason:
+                    self.combo_group.model().item(self.combo_group.count()-1).setEnabled(False)
             self.combo_group.blockSignals(False)
         self._mds, self._du, self._xs_index = mds, du, xs_index
         if new_model:
@@ -216,7 +220,7 @@ class CalibrationTab(QWidget):
             return
 
         try:
-            mf = self._mds.frame(self._xs_index, group_key, RouseConfig())
+            mf = self._mds.frame(self._xs_index, group_key, self._mds.rouse_cfg)
             obs_s, note = observed_series(self._obs.df, col, group_key, kinds)
         except Exception as exc:
             logger.exception("Calibration data build failed")

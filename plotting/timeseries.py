@@ -86,11 +86,12 @@ def draw_timeseries(fig: Figure, req: TimeSeriesRequest, du: DisplayUnits) -> Dr
 
     if req.log_left:
         ax.set_yscale("log")
-    ax.set_ylabel(req.left_name or (f"{lq}" if lq else ""))
+    left_label = req.left_name or (f'{lq}' if lq else '')
+    ax.set_ylabel(f'{left_label} ({du.label(lq)})' if lq else left_label)
     if ax2 is not None:
         if req.log_right:
             ax2.set_yscale("log")
-        ax2.set_ylabel(req.right_name)
+        ax2.set_ylabel(f'{req.right_name} ({du.label(rq)})' if rq else req.right_name)
     ax.grid(True, alpha=0.3)
     loc = mdates.AutoDateLocator()
     ax.xaxis.set_major_locator(loc)
@@ -117,12 +118,17 @@ def draw_stacked_contribution(fig: Figure, class_flux_kg_s: pd.DataFrame, du: Di
     df = class_flux_kg_s.copy()
     neg = (df < 0).sum().sum()
     if neg:
-        info.notes.append(f"{int(neg)} negative class-flux values (HEC-RAS numerical artefact) are not stacked.")
+        info.notes.append(f'{int(neg)} negative signed class-flux values are omitted from the positive contribution stack.')
     df = df.clip(lower=0).dropna(how="all")
     df = df.loc[:, (df.sum() > 0)]
     if resample and len(df) > 400:
         df = df.resample(resample).mean()
     disp = pd.DataFrame(du.convert(df.values, "mass_flux"), index=df.index, columns=df.columns)
+    if disp.empty or not len(disp.columns):
+        ax.text(.5,.5,'No positive class flux is available to stack.',transform=ax.transAxes,ha='center')
+        ax.set_title(title,loc='left')
+        info.notes.append('No positive class flux is available to stack.')
+        return info
     if relative:
         tot = disp.sum(axis=1).replace(0, np.nan)
         disp = disp.div(tot, axis=0).fillna(0)
@@ -152,7 +158,8 @@ def draw_periodic_loads(fig: Figure, loads: pd.DataFrame, du: DisplayUnits, labe
     mass = du.convert(loads["load_kg"].values, "mass")
     ax.bar(loads.index.astype(str), mass, color="#4c78a8", label=label)
     for i, (m, n) in enumerate(zip(mass, loads["n_steps"].values)):
-        ax.text(i, m, f"n={int(n)}", ha="center", va="bottom", fontsize=7, color="#444444")
+        if np.isfinite(m):
+            ax.text(i, m, f"n={int(n)}", ha="center", va="bottom", fontsize=7, color="#444444")
     ax.set_ylabel(f"Load ({du.label('mass')})")
     ax.grid(True, axis="y", alpha=0.3)
     ax.legend(fontsize=8)

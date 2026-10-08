@@ -47,6 +47,19 @@ def _norm(s: str) -> str:
 
 def _guess_unit(header: str, default: str, quantity: str) -> str:
     tokens = re.findall(r"[\(\[]([^\)\]]+)[\)\]]", str(header))
+    if quantity and tokens:
+        valid = []
+        for token in tokens:
+            try:
+                unit = normalize_unit(token)
+            except UnitError:
+                continue
+            if quantity_of(unit) == quantity:
+                valid.append(unit)
+        if valid:
+            return valid[0]
+        raise UnitError(f"Header '{header}' contains unrecognised or incompatible units. "
+                        'Specify supported units before importing this column.')
     for t in tokens + re.split(r"[_ ]+", str(header)):
         try:
             u = normalize_unit(t)

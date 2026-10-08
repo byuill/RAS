@@ -50,6 +50,8 @@ class RatingCurveTab(QWidget):
         self.combo_y.addItems(list(Y_VARS))
 
         self.combo_group = QComboBox()
+        self.combo_group.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_group.setMinimumContentsLength(24)
 
         self.combo_scale = QComboBox()
         self.combo_scale.addItems(["log-log", "log x - linear y", "linear x - log y", "linear-linear"])
@@ -118,6 +120,8 @@ class RatingCurveTab(QWidget):
             self.chk_fit_cat.blockSignals(False)
 
     def _show_error(self, msg: str):
+        self._last_req = None
+        self._last_result = None
         fig = self.canvas.figure
         fig.clear()
         fig.text(0.5, 0.5, msg, ha="center", va="center", wrap=True)
@@ -139,11 +143,18 @@ class RatingCurveTab(QWidget):
             cats = S.season_of(idx)
         else:
             q = mf.df["Q"]
-            limbs_daily = H.classify_limbs(q)
+            settings = self._mds.analysis_settings
+            limbs_daily = H.classify_limbs(q,
+                window_days=getattr(settings,'hysteresis_window_days',7),
+                rise_thresh_cfs=getattr(settings,'hysteresis_rise_threshold_cfs',5000.0),
+                min_q_cfs=getattr(settings,'hysteresis_min_q_cfs',500000.0))
             if kind == "limb":
                 cats = S.map_daily_to_index(limbs_daily, idx)
             else:
-                hydro_daily = S.classify_hydrologic_periods(q, limb_labels=limbs_daily)
+                hydro_daily = S.classify_hydrologic_periods(q,limb_labels=limbs_daily,
+                    rise_thresh_cfs=getattr(settings,'first_flood_rise_threshold_cfs',300000.0),
+                    abs_thresh_cfs=getattr(settings,'first_flood_abs_threshold_cfs',600000.0),
+                    rise_window=getattr(settings,'hysteresis_window_days',7))
                 cats = S.map_daily_to_index(hydro_daily, idx)
         cats = np.asarray(cats)
         self._cat_cache[key] = cats
@@ -176,6 +187,8 @@ class RatingCurveTab(QWidget):
 
     # ------------------------------------------------------------------ public
     def refresh(self, mds, du, pins, xs_index, obs=None):
+        if self._xs_index != xs_index:
+            self._cat_cache.clear()
         if self._mds is not mds:
             self._cat_cache.clear()
             self.combo_group.blockSignals(True)
@@ -183,6 +196,8 @@ class RatingCurveTab(QWidget):
             for g in mds.groups():
                 self.combo_group.addItem(g.label, g.key)
                 self.combo_group.setItemData(self.combo_group.count() - 1, g.description, Qt.ToolTipRole)
+                if g.kind == 'rouse' and mds.rouse_reason:
+                    self.combo_group.model().item(self.combo_group.count()-1).setEnabled(False)
             self.combo_group.blockSignals(False)
         self._mds = mds
         self._du = du
@@ -199,7 +214,7 @@ class RatingCurveTab(QWidget):
 
         group_key = self.combo_group.currentData() or "total"
         try:
-            mf = self._mds.frame(self._xs_index, group_key, RouseConfig())
+            mf = self._mds.frame(self._xs_index, group_key, self._mds.rouse_cfg)
         except Exception as e:
             logger.exception("Rating curve build failed")
             self._show_error(f"Cannot plot: {e}")
@@ -252,7 +267,10 @@ class RatingCurveTab(QWidget):
             lines.append(f"[{key}] {f.equation()}  R\u00b2(log)={f.r2_log:.3f}  n={f.n}  "
                          f"b 95% CI=({f.b_ci[0]:.3f}, {f.b_ci[1]:.3f})")
         lines.extend(result.notes)
+        lines.extend(mf.meta.get('warnings',[]))
         if color_by in ("limb", "hydro"):
-            lines.append("Limb classification uses the original tool's thresholds (rising/falling gated at "
-                         ">500,000 cfs); lower flows are shown as 'Other'.")
+            settings = self._mds.analysis_settings
+            lines.append(f"Limb classification: {getattr(settings,'hysteresis_window_days',7)}-day change; "
+                f"discharge gate > {getattr(settings,'hysteresis_min_q_cfs',500000):g} cfs; "
+                f"change threshold {getattr(settings,'hysteresis_rise_threshold_cfs',5000):g} cfs.")
         self.lbl_info.setText("\n".join(lines))

@@ -41,6 +41,13 @@ class RouseConfig:
     ferguson_c1: float = 18.0
     ferguson_c2: float = 1.0     # natural grains
 
+    def __post_init__(self):
+        validate_thresholds(self.susp_max, self.bed_min)
+        if not all(np.isfinite(v) and v > 0 for v in (self.kappa,self.ferguson_c1,self.ferguson_c2)):
+            raise ValueError('Rouse kappa and settling coefficients must be finite and positive.')
+        if self.source not in ('hecras','computed'):
+            raise ValueError('Rouse source must be hecras or computed.')
+
     def key(self) -> tuple:
         return (self.kappa, self.bed_min, self.susp_max, self.source, self.ferguson_c1, self.ferguson_c2)
 
@@ -104,7 +111,7 @@ def rouse_category(p, susp_max=SUSP_MAX_DEFAULT, bed_min=BED_MIN_DEFAULT):
     """Integer category per value: 0 suspended-dominated, 1 mixed, 2 bed-dominated, -1 invalid."""
     p = np.asarray(p, dtype=float)
     cat = np.full(p.shape, CAT_INVALID, dtype=int)
-    valid = ~np.isnan(p)
+    valid = ~np.isnan(p) & (p >= 0)
     cat[valid & (p < susp_max)] = CAT_SUSPENDED
     cat[valid & (p >= susp_max) & (p < bed_min)] = CAT_MIXED
     cat[valid & (p >= bed_min)] = CAT_BED
@@ -112,5 +119,5 @@ def rouse_category(p, susp_max=SUSP_MAX_DEFAULT, bed_min=BED_MIN_DEFAULT):
 
 
 def validate_thresholds(susp_max: float, bed_min: float) -> None:
-    if not (0 < susp_max <= bed_min):
+    if not (np.isfinite(susp_max) and np.isfinite(bed_min) and 0 < susp_max <= bed_min):
         raise ValueError("Rouse thresholds must satisfy 0 < suspended limit <= bed limit.")

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import itertools
+import copy
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -80,7 +81,12 @@ class PinManager:
     def pin(self, label: str, view: str, series: list[SeriesData], meta: dict) -> PinnedDataset:
         used = {p.color for p in self._items}
         color = next((c for c in PALETTE if c not in used), PALETTE[len(self._items) % len(PALETTE)])
-        item = PinnedDataset(next(self._ids), label, view, list(series), dict(meta), color)
+        snapshots = []
+        for s in series:
+            x,y = np.array(s.x,copy=True),np.array(s.y,copy=True)
+            x.setflags(write=False); y.setflags(write=False)
+            snapshots.append(SeriesData(x,y,s.x_quantity,s.y_quantity,s.label,s.role,copy.deepcopy(s.meta)))
+        item = PinnedDataset(next(self._ids), label, view, snapshots, copy.deepcopy(meta), color)
         self._items.append(item)
         return item
 

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                                QLabel, QTabWidget, QPushButton, QFileDialog,
                                QStatusBar)
@@ -17,6 +19,7 @@ from gui.controls import SearchableComboBox
 from ras.hdf_reader import open_results
 from analysis.model_data import ModelDataService
 from plotting.styles import DisplayUnits, PinManager
+from sediment.rouse import RouseConfig
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +30,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("RAS Sediment Calibration Workbench")
         self.resize(1024, 768)
         
-        self.workers = WorkerManager()
+        self.workers = WorkerManager(self)
+        self._closing = False
         self.mds = None
         self.display_units = DisplayUnits(settings)
         self.pins = PinManager()
@@ -89,30 +93,60 @@ class MainWindow(QMainWindow):
             self._load_file(path)
             
     def _load_file(self, path):
-        self.lbl_file.setText(f"Loaded: {path}")
-        self.settings.last_hdf_path = path
-        self.settings.save()
+        if self._closing:
+            return
+        self.workers.invalidate('plot_data')
+        self._set_busy(True)
         self.status.showMessage(f"Loading {path}...")
-        
+        settings = self.settings
+        def load():
+            res = open_results(path,cache_mb=settings.hdf_cache_mb)
+            try:
+                cfg = RouseConfig(kappa=settings.rouse_kappa,bed_min=settings.rouse_bed_min,
+                                  susp_max=settings.rouse_susp_max,source=settings.rouse_source)
+                mds = ModelDataService(res,sand_min_mm=settings.sand_min_diameter_mm,
+                                       negative_policy=settings.negative_value_policy,
+                                       drop_initial_step=settings.drop_initial_step_sediment,
+                                       cache_mb=settings.analysis_cache_mb,rouse_cfg=cfg,analysis_settings=settings)
+                mds.frame(0,'total',cfg)
+                return mds
+            except Exception:
+                res.close()
+                raise
+        self.workers.submit('hdf',load,self._file_loaded,self._load_failed,on_discard=lambda mds:mds.close())
+
+    def _set_busy(self,busy):
+        self.btn_open.setEnabled(not busy)
+        self.combo_xs.setEnabled(not busy)
+        self.tabs.setEnabled(not busy)
+
+    def _file_loaded(self,mds):
+        if self.mds is not None:
+            self.mds.close()
+        self.mds = mds
+        path = str(mds.res.path)
+        self.lbl_file.setText(f'Loaded: {Path(path).name}')
+        self.lbl_file.setToolTip(path)
+        self.settings.last_hdf_path = path
+        self.settings.default_model_dir = str(Path(path).parent)
         try:
-            res = open_results(path)
-            self.mds = ModelDataService(res)
-            
-            # populate combo_xs
-            self.combo_xs.blockSignals(True)
-            self.combo_xs.clear()
-            for i, xs in enumerate(self.mds.res.info.xs):
-                self.combo_xs.addItem(f"{xs.river} | {xs.reach} | {xs.station} ({xs.label})", i)
-            self.combo_xs.blockSignals(False)
-            
-            self.status.showMessage(f"Loaded {path}")
-            if self.combo_xs.count() > 0:
-                self.combo_xs.setCurrentIndex(0)
-                self.tab_obs.set_model(self.mds, self.combo_xs.currentData())
-                self._update_plots()
-        except Exception as e:
-            logger.exception("Failed to load file")
-            self.status.showMessage(f"Error loading {path}: {e}")
+            self.settings.save()
+        except OSError as exc:
+            logger.warning('Could not save settings: %s',exc)
+        self.combo_xs.blockSignals(True)
+        self.combo_xs.clear()
+        for xs in mds.res.info.xs:
+            self.combo_xs.addItem(xs.label,xs.index)
+        self.combo_xs.setCurrentIndex(0)
+        self.combo_xs.blockSignals(False)
+        self.tab_obs.set_model(mds,0)
+        self._set_busy(False)
+        self._render_plots()
+        self.status.showMessage(f'Loaded {path}. Review Diagnostics for warnings and provenance.')
+
+    def _load_failed(self,exc):
+        self._set_busy(False)
+        self.status.showMessage(f'Could not load results: {exc}. The previous model is retained.')
 
     def _on_xs_changed(self):
         self._update_plots()
@@ -127,8 +161,48 @@ class MainWindow(QMainWindow):
             return
             
         xs_index = self.combo_xs.currentData()
+        mds = self.mds
+        self._set_busy(True)
+        self.status.showMessage(f'Reading cross section {mds.res.info.xs[xs_index].label}...')
+        groups = {'total',self.tab_ts.combo_group.currentData(),self.tab_rc.combo_group.currentData(),
+                  self.tab_cal.combo_group.currentData()}
+        def prepare():
+            for group in groups - {None}:
+                mds.frame(xs_index,group,mds.rouse_cfg)
+        self.workers.submit('plot_data',prepare,lambda _:self._plots_ready(),self._plot_failed)
+
+    def _plot_failed(self,exc):
+        self._set_busy(False)
+        message = f'Cannot read this cross section: {exc}'
+        self.status.showMessage(message)
+        self.tab_ts._show_error(message)
+        self.tab_rc._show_error(message)
+        self.tab_cal._show_message(message)
+
+    def _plots_ready(self):
+        self._set_busy(False)
+        self._render_plots()
+        self.status.showMessage('Ready. Review Diagnostics for warnings and provenance.')
+
+    def _render_plots(self):
+        xs_index = self.combo_xs.currentData()
         self.tab_obs.set_current_xs(xs_index)
         self.tab_ts.refresh(self.mds, self.display_units, self.pins, xs_index)
         self.tab_rc.refresh(self.mds, self.display_units, self.pins, xs_index)
         self.tab_cal.refresh(self.mds, self.display_units, xs_index)
         self.tab_diag.refresh(self.mds, xs_index)
+
+    def closeEvent(self,event):
+        self._closing = True
+        self.workers.invalidate('hdf')
+        self.workers.invalidate('plot_data')
+        self.workers.invalidate('obs')
+        self.workers.invalidate('obs_all')
+        if not self.workers.idle():
+            event.ignore()
+            self.status.showMessage('Waiting for current data requests to finish before closing...')
+            QTimer.singleShot(100,self.close)
+            return
+        if self.mds is not None:
+            self.mds.close()
+        event.accept()

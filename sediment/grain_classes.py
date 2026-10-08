@@ -3,7 +3,7 @@
 Representative diameter
 -----------------------
 HEC-RAS stores, per class, a ``Lower Bound``, ``Geometric Mean`` and ``Upper Bound`` (mm).  The
-class is represented by its **geometric mean** diameter.  Sand = representative D >= 0.063 mm,
+class is represented by its **geometric mean** diameter. Sand = 0.063 <= representative D < 2 mm,
 fines = representative D < 0.063 mm.  Grouping is by diameter, never by class name.
 """
 from __future__ import annotations
@@ -47,7 +47,7 @@ class SedimentGroup:
 def classify_by_diameter(classes: list[GrainClass], sand_min_mm: float = SAND_MIN_D_MM
                          ) -> tuple[list[GrainClass], list[GrainClass]]:
     """Return (sand, fines) using representative diameters."""
-    sand = [c for c in classes if c.d_rep_mm >= sand_min_mm]
+    sand = [c for c in classes if sand_min_mm <= c.d_rep_mm < 2.0]
     fines = [c for c in classes if c.d_rep_mm < sand_min_mm]
     return sand, fines
 
@@ -62,13 +62,16 @@ def build_groups(classes: list[GrainClass], sand_min_mm: float = SAND_MIN_D_MM,
                  rouse_available: bool = True, rouse_reason: str = "") -> list[SedimentGroup]:
     """All sediment groups offered in the GUI, with tooltip text listing the member classes."""
     sand, fines = classify_by_diameter(classes, sand_min_mm)
+    coarse = [c for c in classes if c.d_rep_mm >= 2.0]
     groups = [
         SedimentGroup("total", "Total sediment", tuple(c.index for c in classes),
                       f"Sum of all {len(classes)} grain classes: {_fmt_classes(classes)}"),
-        SedimentGroup("sand", "Total sand (D \u2265 0.063 mm)", tuple(c.index for c in sand),
-                      f"Classes with representative D \u2265 {sand_min_mm:g} mm: {_fmt_classes(sand)}"),
-        SedimentGroup("fines", "Total fines (D < 0.063 mm)", tuple(c.index for c in fines),
+        SedimentGroup("sand", f"Sand ({sand_min_mm:g} \u2264 D < 2 mm)", tuple(c.index for c in sand),
+                      f"Classes with representative {sand_min_mm:g} \u2264 D < 2 mm: {_fmt_classes(sand)}"),
+        SedimentGroup("fines", f"Fines (D < {sand_min_mm:g} mm)", tuple(c.index for c in fines),
                       f"Classes with representative D < {sand_min_mm:g} mm: {_fmt_classes(fines)}"),
+        SedimentGroup('coarse','Gravel and coarser (D \u2265 2 mm)',tuple(c.index for c in coarse),
+                      f'Classes with representative D \u2265 2 mm: {_fmt_classes(coarse)}'),
     ]
     for c in classes:
         groups.append(SedimentGroup(f"class:{c.index}", f"{c.name}  ({c.d_rep_mm:.3g} mm)", (c.index,),

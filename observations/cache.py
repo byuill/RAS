@@ -15,6 +15,9 @@ import json
 import logging
 import os
 import shutil
+import threading
+import tempfile
+from functools import wraps
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +25,7 @@ from pathlib import Path
 import pandas as pd
 
 from core.exceptions import CacheError
+from core.io import atomic_text
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +33,14 @@ SCHEMA_VERSION = 1
 RECENT_DAYS = 3
 
 Range = tuple[pd.Timestamp, pd.Timestamp]
+
+
+def _synchronized(method):
+    @wraps(method)
+    def wrapped(self,*args,**kwargs):
+        with self._lock:
+            return method(self,*args,**kwargs)
+    return wrapped
 
 
 @dataclass
@@ -94,6 +106,7 @@ class ObservationCache:
     def __init__(self, root: Path):
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()
         self.hits = 0
         self.misses = 0
 
@@ -114,6 +127,7 @@ class ObservationCache:
         return self.root
 
     # -- read ----------------------------------------------------------------------------------
+    @_synchronized
     def read_meta(self, provider: str, station_id: str, parameter: str) -> CacheMeta | None:
         _, jp = self._paths(provider, station_id, parameter)
         if not jp.exists():
@@ -124,6 +138,7 @@ class ObservationCache:
         except (OSError, ValueError, TypeError) as exc:
             raise CacheError(f"Cache metadata {jp.name} is unreadable ({exc}). Clear the station cache to rebuild it.") from exc
 
+    @_synchronized
     def lookup(self, provider: str, station_id: str, parameter: str, start, end) -> CacheLookup:
         start, end = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
         meta = self.read_meta(provider, station_id, parameter)
@@ -149,6 +164,7 @@ class ObservationCache:
         return CacheLookup(sel.reset_index(drop=True), missing, meta)
 
     # -- write ---------------------------------------------------------------------------------
+    @_synchronized
     def store(self, provider: str, station_id: str, parameter: str, df: pd.DataFrame, start, end, *,
               station_name: str = "", units: dict | None = None, endpoint: str = "",
               processing: list[str] | None = None, revision: str = "") -> CacheMeta:
@@ -159,6 +175,17 @@ class ObservationCache:
         pp, jp = self._paths(provider, station_id, parameter)
         pp.parent.mkdir(parents=True, exist_ok=True)
         meta = self.read_meta(provider, station_id, parameter) or CacheMeta(provider, station_id, parameter)
+        from sediment.units import normalize_unit
+        from core.exceptions import UnitError
+        for key in meta.units.keys() & (units or {}).keys():
+            before,after = meta.units[key],units[key]
+            try:
+                same = normalize_unit(before)==normalize_unit(after)
+            except UnitError:
+                same = before==after
+            if not same:
+                raise CacheError(f'Observation units changed for {parameter}: {before} to {after}. '
+                                 'Clear this station cache before downloading in the new units.')
         old = pd.read_parquet(pp) if pp.exists() else None
         new = df.copy()
         if "DateTime" not in new.columns:
@@ -187,13 +214,12 @@ class ObservationCache:
                 meta.processing.append(p)
         meta.revision = revision or meta.revision
         meta.schema_version = SCHEMA_VERSION
-        tmp = jp.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(asdict(meta), indent=2), encoding="utf-8")
-        os.replace(tmp, jp)
+        atomic_text(jp,json.dumps(asdict(meta),indent=2)+'\n')
         logger.info("Cache STORE %s/%s/%s: +%d rows, total %d", provider, station_id, parameter, len(new), len(merged))
         return meta
 
     # -- management ----------------------------------------------------------------------------
+    @_synchronized
     def entries(self, station_id: str | None = None) -> list[CacheMeta]:
         out = []
         for jp in self.root.glob("*/*/*.json"):
@@ -205,6 +231,7 @@ class ObservationCache:
                 logger.warning("Skipping unreadable cache metadata %s: %s", jp, exc)
         return out
 
+    @_synchronized
     def clear_station(self, station_id: str) -> int:
         n = 0
         for prov in self.root.glob("*"):
@@ -217,10 +244,17 @@ class ObservationCache:
 
 
 def _safe(s: str) -> str:
-    return "".join(c if c.isalnum() or c in "-_." else "_" for c in s)
+    result = ''.join(c if c.isalnum() or c in '-_.' else '_' for c in s)
+    if not result or result in ('.','..'):
+        raise CacheError('Provider, station and parameter names must be nonempty folder/file names.')
+    return result
 
 
 def _atomic_parquet(df: pd.DataFrame, path: Path) -> None:
-    tmp = path.with_suffix(".parquet.tmp")
-    df.to_parquet(tmp, index=False)
-    os.replace(tmp, path)
+    fd,tmp = tempfile.mkstemp(prefix='.'+path.name+'-',dir=path.parent)
+    os.close(fd)
+    try:
+        df.to_parquet(tmp,index=False)
+        os.replace(tmp,path)
+    finally:
+        if os.path.exists(tmp):os.unlink(tmp)

@@ -17,6 +17,7 @@ if __name__ == "__main__":
     path = sys.argv[1]
     try:
         with h5py.File(path, "r") as f:
-            dump_tree(f)
+            print(dump_tree(f))
     except Exception as e:
         print(f"Error reading {path}: {e}")
+        sys.exit(1)

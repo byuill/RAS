@@ -37,7 +37,13 @@ def interpolate_model_to_times(model: pd.Series, times: pd.DatetimeIndex, mode: 
     ``time_offset_hours`` shifts the observation clock to model time (e.g. -6 for UTC -> CST), default 0.
     Observations outside the model period are NaN, never extrapolated.
     """
-    m = model.dropna().sort_index()
+    if mode not in ('interpolate','nearest'):
+        raise ValueError('Pairing mode must be interpolate or nearest.')
+    if not np.isfinite(max_gap_hours) or max_gap_hours <= 0 or not np.isfinite(time_offset_hours):
+        raise ValueError('Pairing gap must be finite and positive; time offset must be finite.')
+    m = model.sort_index()
+    if m.index.has_duplicates or m.index.hasnans:
+        raise ValueError('Model timestamps must be unique and valid for observation pairing.')
     t = pd.DatetimeIndex(times) + pd.Timedelta(hours=time_offset_hours)
     out = np.full(len(t), np.nan)
     if len(m) == 0:
@@ -47,6 +53,8 @@ def interpolate_model_to_times(model: pd.Series, times: pd.DatetimeIndex, mode: 
     gap = max_gap_hours * 3600e9
     pos = np.searchsorted(mt, tv)
     for i, (p, v) in enumerate(zip(pos, tv)):
+        if pd.isna(t[i]) or v < mt[0] or v > mt[-1]:
+            continue
         if mode == "nearest":
             cands = [j for j in (p - 1, p) if 0 <= j < len(mt)]
             if not cands:
@@ -87,12 +95,41 @@ def cumulative_load(flux_kg_s: pd.Series, dt_days: pd.Series) -> tuple[pd.Series
 def periodic_loads(flux_kg_s: pd.Series, dt_days: pd.Series, by: str = "calendar") -> pd.DataFrame:
     """Annual (calendar) or water-year (Oct-Sep) load in kg, with the number of steps and missing steps.
 
-    Each step is attributed to the day it covers (interval midpoint)."""
+    Flux is assumed constant over its backward output interval. Intervals crossing
+    a calendar/water-year boundary are split by duration. Missing intervals are counted.
+    This is an integration estimate from output rates, not a native cumulative-mass result.
+    """
+    if by not in ('calendar','water'):
+        raise ValueError('Load period must be calendar or water.')
     mass = step_mass_kg(flux_kg_s, dt_days)
     mid = mass.index - pd.to_timedelta(dt_days.fillna(0.0).values / 2.0, unit="D")
     key = water_year_of(pd.DatetimeIndex(mid)) if by == "water" else pd.DatetimeIndex(mid).year
-    g = pd.DataFrame({"mass_kg": mass.values, "key": key}).dropna(subset=["mass_kg"]).groupby("key")
-    out = pd.DataFrame({"load_kg": g["mass_kg"].sum(), "n_steps": g["mass_kg"].count()})
+    def years(index):
+        return water_year_of(index) if by == 'water' else index.year
+    ends = pd.DatetimeIndex(mass.index)
+    starts = ends - pd.to_timedelta(dt_days.values,unit='D')
+    valid_interval = np.isfinite(dt_days.values) & (dt_days.values > 0)
+    crosses = valid_interval & (years(starts) != years(ends-pd.Timedelta(1,unit='ns')))
+    ordinary = valid_interval & ~crosses
+    rows = pd.DataFrame({'mass_kg':mass.values[ordinary],'key':key[ordinary]})
+    pieces = []
+    for i in np.flatnonzero(crosses):
+        start,end = starts[i],ends[i]
+        while start < end:
+            if by == 'water':
+                year = start.year + (start.month >= 10)
+                boundary = pd.Timestamp(year=year,month=10,day=1,tz=start.tz)
+            else:
+                year = start.year
+                boundary = pd.Timestamp(year=year+1,month=1,day=1,tz=start.tz)
+            stop = min(end,boundary)
+            pieces.append({'mass_kg':flux_kg_s.iloc[i]*(stop-start).total_seconds(),'key':year})
+            start = stop
+    if pieces:
+        rows = pd.concat([rows,pd.DataFrame(pieces)],ignore_index=True)
+    g = rows.groupby('key')
+    out = pd.DataFrame({"load_kg": g["mass_kg"].sum(min_count=1), "n_steps": g["mass_kg"].size(),
+                        'n_missing': g['mass_kg'].size()-g['mass_kg'].count()})
     out.index.name = "WaterYear" if by == "water" else "Year"
     return out
 

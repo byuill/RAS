@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, 
-                               QComboBox, QPushButton, QLabel, QSpinBox, QCheckBox)
+                               QComboBox, QPushButton, QLabel, QSpinBox, QCheckBox, QFileDialog, QMessageBox)
 
 from gui.mpl_canvas import MplCanvas
 
@@ -26,6 +26,8 @@ class TimeSeriesTab(QWidget):
         self.combo_sed.addItems(["Sediment Flux", "Sediment Concentration"])
         
         self.combo_group = QComboBox()
+        self.combo_group.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_group.setMinimumContentsLength(24)
         
         self.combo_view = QComboBox()
         self.combo_view.addItems(["Series", "Cumulative Load", "Annual/Water-Year Loads", "Class Contribution Stacked"])
@@ -36,6 +38,10 @@ class TimeSeriesTab(QWidget):
         
         self.btn_pin = QPushButton("Pin Current")
         self.btn_clear_pins = QPushButton("Clear Pins")
+        self.btn_export = QPushButton('Export model CSV...')
+        self.btn_export.setEnabled(False)
+        self.btn_export.setToolTip('Export the selected sediment group and hydraulic fields in display units, '
+                                   'including time intervals and a metadata sidecar.')
         
         ctrl_layout.addWidget(QLabel("Hydraulic:"))
         ctrl_layout.addWidget(self.combo_hyd)
@@ -43,19 +49,21 @@ class TimeSeriesTab(QWidget):
         ctrl_layout.addWidget(self.combo_sed)
         ctrl_layout.addWidget(QLabel("Group:"))
         ctrl_layout.addWidget(self.combo_group)
-        ctrl_layout.addWidget(QLabel("View:"))
-        ctrl_layout.addWidget(self.combo_view)
-        ctrl_layout.addWidget(QLabel("Rolling mean:"))
-        ctrl_layout.addWidget(self.spin_rolling)
         ctrl_layout.addStretch()
-        ctrl_layout.addWidget(self.btn_pin)
-        ctrl_layout.addWidget(self.btn_clear_pins)
-        
         layout.addLayout(ctrl_layout)
+        view_layout = QHBoxLayout()
+        view_layout.addWidget(QLabel('View:'));view_layout.addWidget(self.combo_view)
+        view_layout.addWidget(QLabel('Rolling mean:'));view_layout.addWidget(self.spin_rolling)
+        view_layout.addStretch();view_layout.addWidget(self.btn_pin);view_layout.addWidget(self.btn_clear_pins)
+        view_layout.addWidget(self.btn_export)
+        layout.addLayout(view_layout)
+        self.lbl_info = QLabel('')
+        self.lbl_info.setWordWrap(True)
+        layout.addWidget(self.lbl_info)
         
         # Plot
         self.canvas = MplCanvas(self)
-        layout.addWidget(self.canvas)
+        layout.addWidget(self.canvas,1)
         
         self.combo_hyd.currentIndexChanged.connect(self._redraw)
         self.combo_sed.currentIndexChanged.connect(self._redraw)
@@ -65,6 +73,7 @@ class TimeSeriesTab(QWidget):
         self.spin_rolling.valueChanged.connect(self._redraw)
         self.btn_pin.clicked.connect(self._pin_current)
         self.btn_clear_pins.clicked.connect(self._clear_pins)
+        self.btn_export.clicked.connect(self._export_current)
         
     def _pin_current(self):
         if not hasattr(self, '_last_req') or not self._last_req:
@@ -90,6 +99,8 @@ class TimeSeriesTab(QWidget):
             for g in mds.groups():
                 self.combo_group.addItem(g.label, g.key)
                 self.combo_group.setItemData(self.combo_group.count() - 1, g.description, Qt.ToolTipRole)
+                if g.kind == 'rouse' and mds.rouse_reason:
+                    self.combo_group.model().item(self.combo_group.count()-1).setEnabled(False)
             self.combo_group.blockSignals(False)
         self._mds = mds
         self._du = du
@@ -105,18 +116,19 @@ class TimeSeriesTab(QWidget):
         sed_var = self.combo_sed.currentText()
         
         from sediment.rouse import RouseConfig
-        cfg = RouseConfig() 
+        cfg = self._mds.rouse_cfg
         group_key = self.combo_group.currentData() or "total"
         
         try:
             mf = self._mds.frame(self._xs_index, group_key, cfg)
         except Exception as e:
             logger.exception("Time series build failed")
-            fig = self.canvas.figure
-            fig.clear()
-            fig.text(0.5, 0.5, f"Cannot plot: {e}", ha="center", va="center", wrap=True)
-            self.canvas.draw()
+            self._show_error(f'Cannot plot: {e}')
             return
+        self._last_req = None
+        self._last_frame = mf
+        self.btn_export.setEnabled(True)
+        self.lbl_info.setText('\n'.join(mf.meta.get('warnings',[])))
         
         view = self.combo_view.currentText()
         
@@ -131,6 +143,7 @@ class TimeSeriesTab(QWidget):
                 subtitle=f"{mf.meta['river']} | {mf.meta['reach']} | RS {mf.meta['cross_section']}"
             )
             self.canvas.draw()
+            self.lbl_info.setText('\n'.join(mf.meta.get('warnings',[])) + '\nNegative signed flux is omitted from the positive contribution stack.')
             return
             
         if view == "Annual/Water-Year Loads":
@@ -143,6 +156,9 @@ class TimeSeriesTab(QWidget):
                 subtitle=f"{mf.meta['river']} | {mf.meta['reach']} | RS {mf.meta['cross_section']}"
             )
             self.canvas.draw()
+            self.lbl_info.setText('\n'.join(mf.meta.get('warnings',[])) +
+                f'\nBackward-interval load estimate; {int(loads.n_missing.sum())} missing intervals excluded. '
+                'Intervals crossing year boundaries are split between years.')
             return
             
         hyd_qty = {"Discharge": "discharge", "Stage": "length", "Velocity": "velocity", "BedStress": "shear_stress"}[hyd_var]
@@ -159,7 +175,9 @@ class TimeSeriesTab(QWidget):
         left_series = []
         if view == "Cumulative Load":
             from analysis.calibration_metrics import cumulative_load
-            mass, _ = cumulative_load(mf.df["Flux"], mf.df["dt_days"])
+            mass, missing = cumulative_load(mf.df["Flux"], mf.df["dt_days"])
+            self.lbl_info.setText('\n'.join(mf.meta.get('warnings',[])) +
+                f'\nBackward-interval load estimate; {missing} missing intervals excluded from cumulative load.')
             
             y = mass.values
             if window_days > 0:
@@ -218,4 +236,26 @@ class TimeSeriesTab(QWidget):
         
         draw_timeseries(self.canvas.figure, req, self._du)
         self.canvas.draw()
+
+    def _show_error(self,message):
+        self._last_req = None
+        self._last_frame = None
+        self.btn_export.setEnabled(False)
+        self.lbl_info.setText(message)
+        fig = self.canvas.figure
+        fig.clear()
+        fig.text(.5,.5,message,ha='center',va='center',wrap=True)
+        self.canvas.draw()
+
+    def _export_current(self):
+        if getattr(self,'_last_frame',None) is None:
+            return
+        path,_ = QFileDialog.getSaveFileName(self,'Export model frame','model.csv','CSV (*.csv)')
+        if path:
+            from export.csv_export import export_model_frame
+            try:
+                export_model_frame(self._last_frame,path,self._du)
+                self.lbl_info.setText(f'Exported model data to {path}; metadata sidecar written.')
+            except (OSError,ValueError,TypeError) as exc:
+                QMessageBox.warning(self,'Export failed',str(exc))
 

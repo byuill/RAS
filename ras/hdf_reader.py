@@ -23,6 +23,8 @@ _STAMP_FMT = "%d%b%Y %H:%M:%S"
 
 
 def _dec(v) -> str:
+    if isinstance(v,np.ndarray) and v.size == 1:
+        v = v.reshape(-1)[0]
     return v.decode("utf-8", "replace").strip() if isinstance(v, (bytes, np.bytes_)) else str(v).strip()
 
 
@@ -57,39 +59,83 @@ class RasResults:
         self._h5 = h5
         self.info = info
         self._lock = threading.RLock()
-        self._cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        if not np.isfinite(cache_mb) or cache_mb < 0:
+            raise ValueError('cache_mb must be finite and nonnegative.')
+        self._cache: OrderedDict[object, np.ndarray] = OrderedDict()
         self._cache_bytes = 0
         self._cache_limit = int(cache_mb * 1024 * 1024)
         self.cache_hits = 0
         self.cache_misses = 0
 
     # -- raw access ----------------------------------------------------------------------
-    def matrix(self, path: str) -> np.ndarray:
-        """Entire (time x cross-section) dataset as float32, cached.
+    def _dataset(self, path):
+        if not self._h5.id.valid:
+            raise HdfStructureError('This results file has been closed. Reopen it before reading data.')
+        try:
+            ds = self._h5[path]
+        except KeyError as exc:
+            raise MissingVariableError(f"Dataset '{path}' is not present in this HDF file.") from exc
+        expected = (self.info.n_steps, len(self.info.xs))
+        if not isinstance(ds, h5py.Dataset) or ds.shape != expected or ds.dtype.kind not in 'fiu':
+            raise HdfStructureError(f"Dataset '{path}' must be a numeric time-by-cross-section matrix "
+                                    f'of shape {expected}; found {getattr(ds, "shape", None)}.')
+        return ds
 
-        Reading the full chunked/gzip array and slicing in NumPy is ~40x faster than slicing one
-        column from the HDF dataset, because every chunk spans all cross sections.
+    def _remember(self, key, arr):
+        # A single oversized entry must never bypass the advertised cache limit.
+        if arr.nbytes <= self._cache_limit and self._cache_limit > 0:
+            while self._cache_bytes + arr.nbytes > self._cache_limit and self._cache:
+                _, old = self._cache.popitem(last=False)
+                self._cache_bytes -= old.nbytes
+            arr.setflags(write=False)
+            self._cache[key] = arr
+            self._cache_bytes += arr.nbytes
+        return arr
+
+    def cache_info(self):
+        with self._lock:
+            return {'bytes': self._cache_bytes, 'limit_bytes': self._cache_limit,
+                    'entries': len(self._cache), 'hits': self.cache_hits, 'misses': self.cache_misses}
+
+    def matrix(self, path: str) -> np.ndarray:
+        """Read a small complete matrix without reducing stored numerical precision.
+
+        Explicit full-matrix requests exceeding the cache budget are refused. Use
+        column() for large files. Returned cached matrices are read-only.
         """
         with self._lock:
+            ds = self._dataset(path)
             if path in self._cache:
                 self._cache.move_to_end(path)
                 self.cache_hits += 1
                 return self._cache[path]
             self.cache_misses += 1
-            try:
-                ds = self._h5[path]
-            except KeyError as exc:
-                raise MissingVariableError(f"Dataset '{path}' is not present in this HDF file.") from exc
-            arr = ds[...].astype(np.float32, copy=False)
-            self._cache[path] = arr
-            self._cache_bytes += arr.nbytes
-            while self._cache_bytes > self._cache_limit and len(self._cache) > 1:
-                _, old = self._cache.popitem(last=False)
-                self._cache_bytes -= old.nbytes
-            return arr
+            if ds.size * ds.dtype.itemsize > self._cache_limit:
+                raise HdfStructureError('Full result matrix exceeds the cache budget. Read individual cross sections instead.')
+            return self._remember(path, ds[...])
 
     def column(self, path: str, xs_index: int) -> np.ndarray:
-        return self.matrix(path)[:, xs_index].astype(np.float64)
+        with self._lock:
+            ds = self._dataset(path)
+            if not isinstance(xs_index, (int, np.integer)) or not 0 <= xs_index < ds.shape[1]:
+                raise HdfStructureError(f'Cross-section index {xs_index} is outside this dataset.')
+            if path in self._cache:
+                self._cache.move_to_end(path)
+                self.cache_hits += 1
+                return self._cache[path][:, xs_index].astype(np.float64)
+            key = (path, int(xs_index))
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                self.cache_hits += 1
+                return self._cache[key].copy()
+            # Small matrices can benefit from a single decompression. Large ones
+            # use an HDF hyperslab so selecting one XS never allocates all XS.
+            if ds.size * ds.dtype.itemsize <= min(self._cache_limit, 64 * 1024 * 1024):
+                return self.matrix(path)[:, xs_index].astype(np.float64)
+            self.cache_misses += 1
+            arr = np.asarray(ds[:, xs_index], dtype=np.float64)
+            self._remember(key, arr)
+            return arr.copy() if key in self._cache else arr
 
     def variable_path(self, name: str, class_index: int | None = None) -> str:
         v = self.info.layout.variables.get(name)
@@ -103,8 +149,13 @@ class RasResults:
             raise MissingVariableError(f"'{name}' is not stored for grain class {class_index}.")
         return v.class_paths[class_index]
 
-    def var_units(self, name: str) -> str:
-        return self.info.layout.variables[name].units
+    def var_units(self, name: str, class_index: int | None = None) -> str:
+        variable = self.info.layout.variables.get(name)
+        if variable is None:
+            raise MissingVariableError(f"Result variable '{name}' is not available.")
+        path = self.variable_path(name,class_index) if class_index is not None or variable.total_path else next(iter(variable.class_paths.values()))
+        with self._lock:
+            return _attr_text(self._dataset(path),'Units',variable.units)
 
     def var_column(self, name: str, xs_index: int, class_index: int | None = None) -> np.ndarray:
         return self.column(self.variable_path(name, class_index), xs_index)
@@ -114,15 +165,21 @@ class RasResults:
         return np.column_stack([self.var_column(name, xs_index, k) for k in class_indices])
 
     def prefetch(self, names: list[str], class_indices: list[int] | None = None) -> None:
+        """Warm only matrices that fit the cache; large datasets remain lazy."""
+        def small(path):
+            with self._lock:
+                ds = self._dataset(path)
+                if ds.size * ds.dtype.itemsize <= min(self._cache_limit, 64 * 1024 * 1024):
+                    self.matrix(path)
         for n in names:
             v = self.info.layout.variables.get(n)
             if v is None:
                 continue
             if v.total_path:
-                self.matrix(v.total_path)
-            for k in (class_indices or list(v.class_paths)):
+                small(v.total_path)
+            for k in (class_indices if class_indices is not None else list(v.class_paths)):
                 if k in v.class_paths:
-                    self.matrix(v.class_paths[k])
+                    small(v.class_paths[k])
 
     def close(self) -> None:
         with self._lock:
@@ -144,6 +201,8 @@ class RasResults:
 # Opening / metadata assembly
 # ------------------------------------------------------------------------------------------
 def open_results(path: str | Path, cache_mb: float = 900.0) -> RasResults:
+    if not np.isfinite(cache_mb) or cache_mb < 0:
+        raise ValueError('cache_mb must be finite and nonnegative.')
     path = Path(path)
     if not path.is_file():
         raise HdfStructureError(f"File not found: {path}")
@@ -182,15 +241,14 @@ def _build_info(h5: h5py.File, path: Path, layout: RasLayout) -> RasModelInfo:
     xs = _read_cross_sections(h5, layout, warnings)
     classes = _read_grain_classes(h5, layout, warnings)
 
-    n_cols = h5[layout.variables["Flow"].total_path].shape[1] if "Flow" in layout.variables else None
+    reference = layout.variables.get('Flow') or next(iter(layout.variables.values()), None)
+    n_cols = reference.shape[1] if reference else None
     if n_cols is not None and n_cols != len(xs):
-        warnings.append(f"Cross-section table has {len(xs)} entries but results have {n_cols} columns.")
-        if len(xs) < n_cols:
-            xs = xs + [CrossSection(i, "?", "?", str(i)) for i in range(len(xs), n_cols)]
-        else:
-            xs = xs[:n_cols]
+        raise HdfStructureError(f'Cross-section table has {len(xs)} entries but results have {n_cols} columns. '
+                                'The application cannot safely map these results to cross sections.')
 
-    wkt = _find_projection(path, pa("Project Filename"))
+    wkt = _attr_text(h5,'Projection') or (_attr_text(h5['Geometry'],'Projection') if 'Geometry' in h5 else '')
+    wkt = wkt or _find_projection(path, pa("Project Filename"))
     xs = _attach_coordinates(h5, layout, xs, wkt, warnings)
     for needed in ("Flow", "Water Surface", "Velocity"):
         if needed not in layout.variables:
@@ -208,9 +266,13 @@ def _build_info(h5: h5py.File, path: Path, layout: RasLayout) -> RasModelInfo:
 
 
 def _read_times(h5, layout: RasLayout, sim_start: str, warnings: list[str]) -> pd.DatetimeIndex:
-    days = h5[layout.time_path][...].astype(float)
+    days = h5[layout.time_path][...].astype(float).reshape(-1)
+    if not len(days) or not np.isfinite(days).all() or (np.diff(days) <= 0).any():
+        raise HdfStructureError('Time must contain finite, strictly increasing output times.')
     if layout.time_stamp_path:
-        idx = parse_time_stamps(h5[layout.time_stamp_path][...])
+        idx = parse_time_stamps(h5[layout.time_stamp_path][...].reshape(-1))
+        if len(idx) != len(days) or not idx.is_monotonic_increasing or idx.has_duplicates:
+            raise HdfStructureError('Date stamps must match the Time array and be strictly increasing.')
         # Consistency: stamps vs Time (days) offsets
         if len(idx) > 1 and len(days) == len(idx):
             offs = (idx - idx[0]).total_seconds().values / 86400.0
@@ -219,16 +281,19 @@ def _read_times(h5, layout: RasLayout, sim_start: str, warnings: list[str]) -> p
         return idx
     if not sim_start:
         raise HdfStructureError("Neither time date stamps nor a simulation start time are available.")
-    start = pd.to_datetime(sim_start, format="%d%b%Y %H:%M:%S")
+    start = parse_time_stamps(np.array([sim_start]))[0]
     return start + pd.to_timedelta(days, unit="D")
 
 
 def _read_cross_sections(h5, layout: RasLayout, warnings: list[str]) -> list[CrossSection]:
     if layout.xs_attr_path is None:
-        n = h5[layout.variables["Flow"].total_path].shape[1] if "Flow" in layout.variables else 0
+        reference = layout.variables.get('Flow') or next(iter(layout.variables.values()), None)
+        n = reference.shape[1] if reference else 0
         return [CrossSection(i, "?", "?", str(i)) for i in range(n)]
     a = h5[layout.xs_attr_path][...]
     names = a.dtype.names or ()
+    if not {'River','Reach'} <= set(names) or not {'Station','RS'} & set(names):
+        raise HdfStructureError('Cross-section attributes require River, Reach and Station/RS fields.')
     stn = "Station" if "Station" in names else "RS"
     out = []
     for i, rec in enumerate(a):
@@ -242,13 +307,23 @@ def _read_grain_classes(h5, layout: RasLayout, warnings: list[str]) -> list[Grai
     if layout.grain_names_path is None:
         warnings.append("Sediment grain-class metadata could not be located in this HDF file.")
         return []
-    names = [_dec(n) for n in h5[layout.grain_names_path][...]]
+    names = [_dec(n) for n in h5[layout.grain_names_path][...].reshape(-1)]
     n = len(names)
     bounds = h5[layout.grain_bounds_path][...] if layout.grain_bounds_path else None
     dens = h5[layout.density_path][...] if layout.density_path else None
     coh = h5[layout.cohesive_path][...] if layout.cohesive_path else None
+    for title, data, columns in [('Grain Class Bounds',bounds,3),('Density Data',dens,3)]:
+        if data is not None and (data.ndim != 2 or data.shape[0] != n or data.shape[1] < columns):
+            raise HdfStructureError(f'{title} must have one row per grain class and at least {columns} columns.')
+    if coh is not None:
+        coh = coh.reshape(-1)
+        if len(coh) != n:
+            raise HdfStructureError('Cohesive Classes must have one value per grain class.')
     if bounds is None:
         warnings.append("Grain-class diameters are not stored; sand/fines grouping is unavailable.")
+    imperial_density = _dec(h5.attrs.get('Units System','')).lower() not in ('si','metric')
+    if dens is not None and not imperial_density:
+        warnings.append('SI grain unit weights are not interpreted; volume-out mass reconstruction is disabled.')
     classes = []
     for i, nm in enumerate(names):
         if bounds is not None:
@@ -261,7 +336,7 @@ def _read_grain_classes(h5, layout: RasLayout, warnings: list[str]) -> list[Grai
             index=i + 1, name=nm, d_lower_mm=lo, d_rep_mm=geo, d_upper_mm=hi,
             specific_gravity=float(dens[i][0]) if dens is not None else 2.65,
             porosity=float(dens[i][1]) if dens is not None else float("nan"),
-            unit_weight_lb_ft3=float(dens[i][2]) if dens is not None else float("nan"),
+            unit_weight_lb_ft3=float(dens[i][2]) if dens is not None and imperial_density else float("nan"),
             cohesive=bool(coh[i]) if coh is not None and i < len(coh) else False))
     return classes
 
@@ -293,15 +368,20 @@ def _attach_coordinates(h5, layout: RasLayout, xs: list[CrossSection], wkt: str 
         return xs
     ga = h5[layout.geometry_xs_attr_path][...]
     gnames = ga.dtype.names or ()
+    if not {'River','Reach'} <= set(gnames) or not {'RS','Station'} & set(gnames):
+        warnings.append('Geometry XS attributes cannot be matched to results; coordinates unavailable.')
+        return xs
     gstn = "RS" if "RS" in gnames else "Station"
     key_to_geom = {(_dec(r["River"]), _dec(r["Reach"]), _dec(r[gstn])): i for i, r in enumerate(ga)}
     info = h5[layout.geometry_polyline_info_path][...]
-    pts = h5[layout.geometry_polyline_points_path][...]
+    pts = h5[layout.geometry_polyline_points_path]
+    if info.ndim != 2 or info.shape[0] != len(ga) or info.shape[1] < 2 or pts.ndim != 2 or pts.shape[1] < 2:
+        warnings.append('Geometry XS polyline dimensions are invalid; coordinates unavailable.')
+        return xs
     proj = parse_albers_wkt(wkt) if wkt else None
     if proj is None:
-        proj = parse_albers_wkt(DEFAULT_ALBERS_WKT)
-        warnings.append("No project projection (.prj) found; assuming USA Contiguous Albers (USGS) for XS "
-                        "coordinates. Verify gauge mapping.")
+        warnings.append('Project projection is missing or unsupported. Projected XS coordinates are retained, '
+                        'but automatic gauge mapping is disabled; map stations manually.')
     out = []
     for xsec in xs:
         gi = key_to_geom.get((xsec.river, xsec.reach, xsec.station))
@@ -309,9 +389,13 @@ def _attach_coordinates(h5, layout: RasLayout, xs: list[CrossSection], wkt: str 
             out.append(xsec)
             continue
         start, count = int(info[gi][0]), int(info[gi][1])
+        if start < 0 or count <= 0 or start + count > len(pts):
+            warnings.append(f'{xsec.label}: invalid XS polyline bounds; coordinates unavailable.')
+            out.append(xsec)
+            continue
         p = pts[start:start + count]
         x, y = float(p[:, 0].mean()), float(p[:, 1].mean())
-        lon, lat = proj.inverse(x, y)
+        lon, lat = proj.inverse(x, y) if proj is not None else (np.nan,np.nan)
         out.append(CrossSection(xsec.index, xsec.river, xsec.reach, xsec.station, xsec.name,
                                 xsec.station_value, x, y, float(lon), float(lat)))
     return out
