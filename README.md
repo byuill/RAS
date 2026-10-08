@@ -36,6 +36,10 @@ python main.py
 - Plot Time Series and Rating Curves
 - Export plots (PNG, SVG, PDF) and CSV data
 - Calibrate model vs observed data
+- Time Series Calibration: measured sediment points and fitted rating-derived
+  concentration/load series, residual plots, RMSE/bias/NSE/KGE, and comparison CSVs
+- Linear, power-law, logarithmic and polynomial transport functions with explicit
+  discharge drivers, fit-range limits and optional power-law bias correction
 - Byte-bounded HDF and analysis caches; large matrices read by cross section
 - Background file/cross-section reads and visible integrity/provenance diagnostics
 - Caches observed data in local Parquet files with JSON coverage metadata

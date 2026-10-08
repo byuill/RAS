@@ -12,6 +12,7 @@ from gui.time_series_tab import TimeSeriesTab
 from gui.rating_curve_tab import RatingCurveTab
 from gui.observations_tab import ObservationsTab
 from gui.calibration_tab import CalibrationTab
+from gui.time_series_calibration_tab import TimeSeriesCalibrationTab
 from gui.diagnostics_tab import DiagnosticsTab
 from gui.workers import WorkerManager
 from gui.controls import SearchableComboBox
@@ -64,13 +65,16 @@ class MainWindow(QMainWindow):
         self.tab_rc = RatingCurveTab()
         self.tab_obs = ObservationsTab(self.workers, settings)
         self.tab_cal = CalibrationTab(settings)
+        self.tab_ts_cal = TimeSeriesCalibrationTab(settings)
         self.tab_obs.obs_changed.connect(self.tab_cal.set_observations)
+        self.tab_obs.obs_changed.connect(self.tab_ts_cal.set_observations)
         self.tab_obs.xs_requested.connect(self._select_xs_by_index)
         self.tab_diag = DiagnosticsTab()
         
         self.tabs.addTab(self.tab_ts, "Time Series")
         self.tabs.addTab(self.tab_rc, "Rating Curve")
         self.tabs.addTab(self.tab_cal, "Calibration")
+        self.tabs.addTab(self.tab_ts_cal, "Time Series Calibration")
         self.tabs.addTab(self.tab_obs, "Observations")
         self.tabs.addTab(self.tab_diag, "Diagnostics")
         
@@ -165,7 +169,7 @@ class MainWindow(QMainWindow):
         self._set_busy(True)
         self.status.showMessage(f'Reading cross section {mds.res.info.xs[xs_index].label}...')
         groups = {'total',self.tab_ts.combo_group.currentData(),self.tab_rc.combo_group.currentData(),
-                  self.tab_cal.combo_group.currentData()}
+                  self.tab_cal.combo_group.currentData(),self.tab_ts_cal.combo_group.currentData()}
         def prepare():
             for group in groups - {None}:
                 mds.frame(xs_index,group,mds.rouse_cfg)
@@ -178,6 +182,7 @@ class MainWindow(QMainWindow):
         self.tab_ts._show_error(message)
         self.tab_rc._show_error(message)
         self.tab_cal._show_message(message)
+        self.tab_ts_cal._show_message(message)
 
     def _plots_ready(self):
         self._set_busy(False)
@@ -190,6 +195,7 @@ class MainWindow(QMainWindow):
         self.tab_ts.refresh(self.mds, self.display_units, self.pins, xs_index)
         self.tab_rc.refresh(self.mds, self.display_units, self.pins, xs_index)
         self.tab_cal.refresh(self.mds, self.display_units, xs_index)
+        self.tab_ts_cal.refresh(self.mds, self.display_units, xs_index)
         self.tab_diag.refresh(self.mds, xs_index)
 
     def closeEvent(self,event):
