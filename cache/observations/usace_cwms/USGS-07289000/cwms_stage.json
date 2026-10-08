@@ -1,0 +1,28 @@
+{
+  "provider": "usace_cwms",
+  "station_id": "USGS-07289000",
+  "parameter": "cwms_stage",
+  "station_name": "Mississippi River at Vicksburg, MS",
+  "units": {
+    "value": "ft"
+  },
+  "retrieved": "2026-10-07T21:38:38+00:00",
+  "coverage": [
+    [
+      "2004-01-01",
+      "2013-01-01"
+    ]
+  ],
+  "actual_start": "2004-01-01T06:00:00",
+  "actual_end": "2013-01-01T06:00:00",
+  "n_records": 3289,
+  "source_endpoints": [
+    "https://cwms-data.usace.army.mil/cwms-data/timeseries?name=Vicksburg.Elev.Inst.1Day.0.DCP-rev&office=MVK"
+  ],
+  "processing": [
+    "Time stamps converted from UTC to America/Chicago clock; CWMS series 'Vicksburg.Elev.Inst.1Day.0.DCP-rev'.",
+    "CWMS vertical datum: native NGVD-29, gage elevation 46.23 ft."
+  ],
+  "schema_version": 1,
+  "revision": ""
+}

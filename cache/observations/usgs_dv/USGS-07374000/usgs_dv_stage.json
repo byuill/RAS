@@ -1,0 +1,27 @@
+{
+  "provider": "usgs_dv",
+  "station_id": "USGS-07374000",
+  "parameter": "usgs_dv_stage",
+  "station_name": "Mississippi River at Baton Rouge, LA",
+  "units": {
+    "value": "ft"
+  },
+  "retrieved": "2026-10-07T21:30:58+00:00",
+  "coverage": [
+    [
+      "2004-01-01",
+      "2013-01-01"
+    ]
+  ],
+  "actual_start": "2004-03-17T00:00:00",
+  "actual_end": "2013-01-01T00:00:00",
+  "n_records": 3204,
+  "source_endpoints": [
+    "https://waterservices.usgs.gov/nwis/dv/"
+  ],
+  "processing": [
+    "Several statistics returned (['00001', '00002', '00003']); only the daily mean (00003) is cached."
+  ],
+  "schema_version": 1,
+  "revision": ""
+}

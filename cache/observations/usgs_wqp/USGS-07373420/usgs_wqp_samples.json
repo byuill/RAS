@@ -1,0 +1,30 @@
+{
+  "provider": "usgs_wqp",
+  "station_id": "USGS-07373420",
+  "parameter": "usgs_wqp_samples",
+  "station_name": "Mississippi River near St. Francisville, LA",
+  "units": {
+    "ssc_mg_l": "mg/L",
+    "ssl_tons_day": "tons/day",
+    "pct_fines": "%",
+    "discharge_cfs": "cfs",
+    "gage_height_ft": "ft",
+    "water_temp_c": "degC"
+  },
+  "retrieved": "2026-10-07T21:38:43+00:00",
+  "coverage": [
+    [
+      "2004-01-01",
+      "2013-01-01"
+    ]
+  ],
+  "actual_start": "2004-01-13T10:30:00",
+  "actual_end": "2012-12-03T09:00:00",
+  "n_records": 132,
+  "source_endpoints": [
+    "https://www.waterqualitydata.us/data/Result/search"
+  ],
+  "processing": [],
+  "schema_version": 1,
+  "revision": ""
+}

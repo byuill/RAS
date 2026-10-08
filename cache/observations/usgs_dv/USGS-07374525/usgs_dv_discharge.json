@@ -1,0 +1,25 @@
+{
+  "provider": "usgs_dv",
+  "station_id": "USGS-07374525",
+  "parameter": "usgs_dv_discharge",
+  "station_name": "Mississippi River at Belle Chasse, LA",
+  "units": {
+    "value": "cfs"
+  },
+  "retrieved": "2026-10-07T21:38:45+00:00",
+  "coverage": [
+    [
+      "2004-01-01",
+      "2013-01-01"
+    ]
+  ],
+  "actual_start": "2008-10-29T00:00:00",
+  "actual_end": "2013-01-01T00:00:00",
+  "n_records": 1516,
+  "source_endpoints": [
+    "https://waterservices.usgs.gov/nwis/dv/"
+  ],
+  "processing": [],
+  "schema_version": 1,
+  "revision": ""
+}

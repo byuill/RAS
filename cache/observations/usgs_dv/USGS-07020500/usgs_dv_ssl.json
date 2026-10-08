@@ -1,0 +1,25 @@
+{
+  "provider": "usgs_dv",
+  "station_id": "USGS-07020500",
+  "parameter": "usgs_dv_ssl",
+  "station_name": "Mississippi River at Chester, IL",
+  "units": {
+    "value": "tons/day"
+  },
+  "retrieved": "2026-10-07T21:38:27+00:00",
+  "coverage": [
+    [
+      "2004-01-01",
+      "2013-01-01"
+    ]
+  ],
+  "actual_start": "2004-01-01T00:00:00",
+  "actual_end": "2013-01-01T00:00:00",
+  "n_records": 3288,
+  "source_endpoints": [
+    "https://waterservices.usgs.gov/nwis/dv/"
+  ],
+  "processing": [],
+  "schema_version": 1,
+  "revision": ""
+}

@@ -1,0 +1,235 @@
+# Observation station catalog.
+# Values below were verified on 2026-10-07 against the USGS NWIS site service / series catalog
+# (waterservices.usgs.gov/nwis/site) and the USACE CWMS Data API.  Nothing here is a model result.
+#
+# Add stations by appending to this list, or place additional entries in stations_user.yaml
+# (same schema; same id overrides the entry here).
+#
+# parameter keys (see observations/providers.py):
+#   usgs_dv_discharge  USGS daily mean discharge (00060, cfs)
+#   usgs_dv_stage      USGS daily mean gage height (00065, ft above gage zero)
+#   usgs_dv_ssc        USGS daily suspended-sediment concentration (80154, mg/L)
+#   usgs_dv_ssl        USGS daily suspended-sediment discharge (80155, short tons/day)
+#   usgs_wqp_samples   USGS discrete samples via Water Quality Portal (80154, 80155, 70331 %<0.0625mm, 00061/00060, 00065, 00010)
+#   cwms_flow / cwms_stage   USACE CWMS time series named in the `cwms` block
+#
+# gage_zero_elev_ft / gage_zero_datum: elevation of gage zero (USGS site header).  Stage elevation
+# (= gage height + zero [+ shift]) is only computed when the datum is NAVD88, or when
+# ngvd29_to_navd88_shift_ft is supplied for NGVD29 gages.
+# legacy_ras_station: the LMR river station used for this gage in the earlier RAS_Sed_Viewer.py
+# (hint only; the application maps stations geospatially and stores overrides in station_mappings.json).
+
+stations:
+  - id: USGS-07010000
+    site_no: "07010000"
+    name: Mississippi River at St. Louis, MO
+    short_name: St. Louis
+    agency: USGS
+    river: Mississippi
+    river_mile: 180.0
+    river_mile_basis: miles above the Ohio River confluence (Middle Mississippi River convention)
+    lat: 38.629
+    lon: -90.1797778
+    gage_zero_elev_ft: 379.58
+    gage_zero_datum: NAVD88
+    parameters:
+      usgs_dv_discharge: [1861-01-01, 2026-10-06]
+      usgs_dv_stage: [1982-10-01, 2026-10-07]
+      usgs_dv_ssc: [1980-09-30, 2022-09-30]
+      usgs_dv_ssl: [1980-09-30, 2022-09-30]
+      usgs_wqp_samples: [1959-12-08, 2022-08-09]
+    notes: Upstream of the template model domain (the model's Middle Mississippi reach starts ~RM 38 above the Ohio River).
+
+  - id: USGS-07020500
+    site_no: "07020500"
+    name: Mississippi River at Chester, IL
+    short_name: Chester
+    agency: USGS
+    river: Mississippi
+    river_mile: 109.9
+    river_mile_basis: miles above the Ohio River confluence (Middle Mississippi River convention)
+    lat: 37.90075
+    lon: -89.8302222
+    gage_zero_elev_ft: 340.73
+    gage_zero_datum: NAVD88
+    parameters:
+      usgs_dv_discharge: [1942-07-01, 2026-10-06]
+      usgs_dv_stage: [1982-10-01, 2026-10-07]
+      usgs_dv_ssc: [1982-10-01, 2022-09-30]
+      usgs_dv_ssl: [1982-10-01, 2022-09-30]
+      usgs_wqp_samples: [1982-10-07, 2022-08-10]
+
+  - id: USGS-07022000
+    site_no: "07022000"
+    name: Mississippi River at Thebes, IL
+    short_name: Thebes
+    agency: USGS
+    river: Mississippi
+    river_mile: 43.7
+    river_mile_basis: miles above the Ohio River confluence (Middle Mississippi River convention)
+    lat: 37.22025
+    lon: -89.4631667
+    gage_zero_elev_ft: 299.70
+    gage_zero_datum: NAVD88
+    parameters:
+      usgs_dv_discharge: [1933-04-01, 2026-10-06]
+      usgs_dv_stage: [1982-10-01, 2026-10-07]
+      usgs_dv_ssl: [1982-10-01, 2021-09-29]
+      usgs_wqp_samples: [1973-01-30, 2023-06-28]
+
+  - id: USGS-07032000
+    site_no: "07032000"
+    name: Mississippi River at Memphis, TN
+    short_name: Memphis
+    agency: USGS
+    river: Mississippi
+    lat: 35.12314616
+    lon: -90.077592
+    gage_zero_elev_ft: 184.03
+    gage_zero_datum: NAVD88
+    parameters:
+      usgs_dv_discharge: [1933-01-01, 2026-10-06]
+      usgs_wqp_samples: [1973-07-13, 2024-01-03]
+
+  - id: USGS-07289000
+    site_no: "07289000"
+    name: Mississippi River at Vicksburg, MS
+    short_name: Vicksburg
+    agency: USGS
+    river: Mississippi
+    river_mile: null
+    lat: 32.31464167
+    lon: -90.9058444
+    legacy_ras_station: "433.5"
+    parameters:
+      usgs_dv_discharge: [2008-01-01, 2026-10-06]
+      usgs_wqp_samples: [1973-04-05, 2008-04-30]
+      cwms_flow: [1901-01-02, 2026-09-13]
+      cwms_stage: [1941-01-02, 2026-09-13]
+    cwms:
+      office: MVK
+      flow: Vicksburg.Flow.Inst.1Day.0.DCP-rev
+      stage: Vicksburg.Elev.Inst.1Day.0.DCP-rev
+      stage_kind: elevation
+      stage_datum: NGVD29
+    ngvd29_to_navd88_shift_ft: null
+    notes: USGS discrete sediment samples exist 1973-2008 (SSC, % fines); daily discharge from USGS from 2008, USACE CWMS from 1901.
+
+  - id: USGS-07290880
+    site_no: "07290880"
+    name: Mississippi River at Natchez, MS
+    short_name: Natchez
+    agency: USGS
+    river: Mississippi
+    lat: 31.56044444
+    lon: -91.4187222
+    legacy_ras_station: "361.6"
+    parameters:
+      usgs_wqp_samples: [2008-04-17, 2024-01-26]
+
+  - id: USGS-07295025
+    site_no: "07295025"
+    name: Mississippi River at Union Point (Mile 326)
+    short_name: Union Point
+    agency: USGS
+    river: Mississippi
+    river_mile: 326.0
+    river_mile_basis: from the USGS site name
+    lat: 31.21625
+    lon: -91.6219722
+    parameters:
+      usgs_wqp_samples: [1991-04-26, 2024-02-06]
+
+  - id: USGS-07295100
+    site_no: "07295100"
+    name: Mississippi River at Tarbert Landing, MS
+    short_name: Tarbert Landing
+    agency: USGS
+    river: Mississippi
+    lat: 31.00851173
+    lon: -91.6237292
+    legacy_ras_station: "304.4"
+    gage_zero_elev_ft: 0.0
+    gage_zero_datum: NGVD29
+    ngvd29_to_navd88_shift_ft: null
+    parameters:
+      usgs_wqp_samples: [1972-09-21, 2024-02-01]
+
+  - id: USGS-07373290
+    site_no: "07373290"
+    name: Mississippi River at Red River Landing, LA
+    short_name: Red River Landing
+    agency: USGS
+    river: Mississippi
+    lat: 30.9610134
+    lon: -91.6645625
+    gage_zero_elev_ft: 0.0
+    gage_zero_datum: NGVD29
+    ngvd29_to_navd88_shift_ft: null
+    parameters: {}
+    notes: Listed as (COE) in NWIS; no USGS series verified. Data availability unknown - the loader reports what the services return.
+
+  - id: USGS-07373420
+    site_no: "07373420"
+    name: Mississippi River near St. Francisville, LA
+    short_name: St. Francisville
+    agency: USGS
+    river: Mississippi
+    lat: 30.75851659
+    lon: -91.3959464
+    legacy_ras_station: "267.3"
+    parameters:
+      usgs_wqp_samples: [1978-06-05, 2024-02-26]
+
+  - id: USGS-07374000
+    site_no: "07374000"
+    name: Mississippi River at Baton Rouge, LA
+    short_name: Baton Rouge
+    agency: USGS
+    river: Mississippi
+    lat: 30.44566667
+    lon: -91.1915556
+    legacy_ras_station: "229.9"
+    gage_zero_elev_ft: 0.0
+    gage_zero_datum: NAVD88
+    parameters:
+      usgs_dv_discharge: [2004-03-17, 2026-10-06]
+      usgs_dv_stage: [1997-07-01, 2026-10-06]
+      usgs_wqp_samples: [1975-03-25, 2023-08-24]
+    cwms:
+      office: MVN
+      stage: Baton_Rouge.Stage.Inst.1Hour.0.rev-NAVD88
+      stage_kind: elevation
+      stage_datum: NAVD88
+
+  - id: USGS-07374200
+    site_no: "07374200"
+    name: Mississippi River at Donaldsonville, LA
+    short_name: Donaldsonville
+    agency: USGS
+    river: Mississippi
+    lat: 30.10853217
+    lon: -90.9875994
+    parameters: {}
+    cwms:
+      office: MVN
+      stage: Donaldsonville.Stage.Inst.1Hour.0.rev-NAVD88
+      stage_kind: elevation
+      stage_datum: NAVD88
+    notes: No USGS time-series catalog entries were found for the sediment parameters; USACE stage only.
+
+  - id: USGS-07374525
+    site_no: "07374525"
+    name: Mississippi River at Belle Chasse, LA
+    short_name: Belle Chasse
+    agency: USGS
+    river: Mississippi
+    lat: 29.85715084
+    lon: -89.977847
+    legacy_ras_station: "75"
+    gage_zero_elev_ft: -6.58
+    gage_zero_datum: NAVD88
+    parameters:
+      usgs_dv_discharge: [2008-10-29, 2026-10-06]
+      usgs_dv_stage: [2008-10-29, 2026-10-06]
+      usgs_wqp_samples: [2006-05-11, 2024-02-28]

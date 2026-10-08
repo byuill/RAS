@@ -1,0 +1,25 @@
+{
+  "provider": "usgs_dv",
+  "station_id": "USGS-07022000",
+  "parameter": "usgs_dv_discharge",
+  "station_name": "Mississippi River at Thebes, IL",
+  "units": {
+    "value": "cfs"
+  },
+  "retrieved": "2026-10-07T21:38:30+00:00",
+  "coverage": [
+    [
+      "2004-01-01",
+      "2013-01-01"
+    ]
+  ],
+  "actual_start": "2004-01-01T00:00:00",
+  "actual_end": "2013-01-01T00:00:00",
+  "n_records": 3289,
+  "source_endpoints": [
+    "https://waterservices.usgs.gov/nwis/dv/"
+  ],
+  "processing": [],
+  "schema_version": 1,
+  "revision": ""
+}

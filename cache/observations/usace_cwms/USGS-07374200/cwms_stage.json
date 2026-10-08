@@ -1,0 +1,25 @@
+{
+  "provider": "usace_cwms",
+  "station_id": "USGS-07374200",
+  "parameter": "cwms_stage",
+  "station_name": "Mississippi River at Donaldsonville, LA",
+  "units": {
+    "value": "ft"
+  },
+  "retrieved": "2026-10-07T21:30:40+00:00",
+  "coverage": [
+    [
+      "2004-01-01",
+      "2013-01-01"
+    ]
+  ],
+  "actual_start": null,
+  "actual_end": null,
+  "n_records": 0,
+  "source_endpoints": [
+    "https://cwms-data.usace.army.mil/cwms-data/timeseries?name=Donaldsonville.Stage.Inst.1Hour.0.rev-NAVD88&office=MVN"
+  ],
+  "processing": [],
+  "schema_version": 1,
+  "revision": ""
+}
