@@ -46,6 +46,7 @@ def create_demo(directory):
                                 'semantics': 'local_temporally_cumulative', 'basis': 'bulk_geometric',
                                 'dataset': 'native_local', 'scale_to_m3': 1., 'deposition_sign': 1.},
               'integration': {'max_gap_m': 25., 'min_coverage': 1., 'max_reach_length_m': 10000.}}
+    config['native_volume'].update(footprint_verified=True, time_dataset='dates')
     (directory/'config.json').write_text(json.dumps(config, indent=2), encoding='utf-8')
     return directory
 

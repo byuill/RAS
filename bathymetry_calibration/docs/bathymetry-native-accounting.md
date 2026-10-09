@@ -1,5 +1,19 @@
 # HEC-RAS 1-D Sediment Native Volume Accounting
 
+The identities and accounting assertions below were recorded in the supplied
+branch. The cloud review did not have the real HDF or a licensed RAS installation
+to reproduce them. Prefix-sum agreement verifies spatial accumulation but does
+not by itself establish bulk versus solid basis, sediment footprint, endpoint
+lengths, or geometric reconstruction. Verify those separately with the current
+manual, model metadata, and numerical GUI exports.
+
+The comparison workflow now requires explicit native date mapping and verified
+full-footprint contiguous support for a native audit. SE/profile and native
+sediment time indices may differ. Configure `time_dataset` and
+`footprint_verified` only after checking them. Partial/disconnected support skips
+the audit and records the reason in exports. See the parent README for the
+current support and pattern-diagnostic contracts.
+
 ## Exact Native Variable Identities
 Based on inspection of the local HEC-RAS plan HDF file (`R1_Dyn_SLR1.p01.hdf`):
 - **Local Time-Cumulative Volume:**

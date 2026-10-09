@@ -18,7 +18,16 @@
       "z_scale_to_m": 1,
       "z_offset_m": 0,
       "sampling": "nearest",
-      "horizontal_transformation": ""
+      "horizontal_transformation": "",
+      "qaqc": {
+        "spike_min_m": 1,
+        "robust_z_limit": 6,
+        "exclude_flagged": false,
+        "duplicate_policy": "error",
+        "excluded_points": [],
+        "datum_correction_m": 0,
+        "datum_correction_evidence": ""
+      }
     },
     "MB_2025": {
       "kind": "gdb_raster",
@@ -30,7 +39,16 @@
       "z_scale_to_m": 1,
       "z_offset_m": 0,
       "sampling": "nearest",
-      "horizontal_transformation": ""
+      "horizontal_transformation": "",
+      "qaqc": {
+        "spike_min_m": 1,
+        "robust_z_limit": 6,
+        "exclude_flagged": false,
+        "duplicate_policy": "error",
+        "excluded_points": [],
+        "datum_correction_m": 0,
+        "datum_correction_evidence": ""
+      }
     }
   },
   "model": {
@@ -49,6 +67,18 @@
   "integration": {
     "max_gap_m": 25,
     "min_coverage": 1,
-    "max_reach_length_m": 10000
+    "max_reach_length_m": 10000,
+    "domain_mode": "intersection",
+    "grid_spacing_m": 10,
+    "sample_spacing_m": 10,
+    "min_common_width_m": 0,
+    "longitudinal_limit_m": 50
+  },
+  "diagnostics": {
+    "change_threshold_m": 0.05,
+    "slope_threshold_m_per_km": 0.01,
+    "concavity_threshold_m_per_km2": 0.01,
+    "datum_shift_threshold_m": 0.5,
+    "stable_controls": []
   }
 }

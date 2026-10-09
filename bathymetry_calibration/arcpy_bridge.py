@@ -1,12 +1,14 @@
 """Standalone stdlib + ArcPy subprocess adapter. Never edit source geodatabases."""
 import json
+import math
 from pathlib import Path
 import sys
 
 
 def spatial_reference(arcpy, text):
-    sr = arcpy.SpatialReference(int(text.split(':')[1])) if text.upper().startswith('EPSG:') else arcpy.SpatialReference()
-    if not text.upper().startswith('EPSG:'):
+    authority_code = text.upper().startswith(('EPSG:', 'ESRI:'))
+    sr = arcpy.SpatialReference(int(text.split(':')[1])) if authority_code else arcpy.SpatialReference()
+    if not authority_code:
         sr.loadFromString(text)
     if sr.type != 'Projected' or abs(sr.metersPerUnit - 1.0) > 1e-9:
         raise ValueError('Analysis CRS must be projected with metre horizontal units.')
@@ -15,7 +17,8 @@ def spatial_reference(arcpy, text):
 
 def sample_raster_batch(arcpy, dataset, knots, analysis_sr, raster_sr, transformation, sampling):
     """Sample a raster at many XY points with one ExtractValuesToPoints call; None = NoData."""
-    arcpy.CheckOutExtension('Spatial')
+    if arcpy.CheckOutExtension('Spatial') != 'CheckedOut':
+        raise ValueError('Spatial Analyst is required for batch raster interpolation.')
     try:
         fc = arcpy.management.CreateFeatureclass('in_memory', 'xs_pts', 'POINT', spatial_reference=analysis_sr)
         arcpy.management.AddField(fc, 'pid', 'LONG')
@@ -32,7 +35,7 @@ def sample_raster_batch(arcpy, dataset, knots, analysis_sr, raster_sr, transform
         values = [None] * len(knots)
         with arcpy.da.SearchCursor(out_fc, ['pid', 'RASTERVALU']) as cursor:
             for pid, value in cursor:
-                if value is not None and value > -9990:
+                if value is not None and math.isfinite(value) and value != -9999:
                     values[pid] = float(value)
         return values
     finally:
@@ -59,29 +62,18 @@ def execute(request):
                 description = arcpy.Describe(path)
                 items.append({'name': str(Path(path).relative_to(request['gdb'])),
                               'type': description.dataType,
+                              'crs': description.spatialReference.name if description.spatialReference else 'Unknown',
+                              'crs_factory_code': description.spatialReference.factoryCode if description.spatialReference else None,
                               'fields': [f.name for f in arcpy.ListFields(path)] if description.dataType != 'RasterDataset' else []})
         return items
-    elif request['operation'] == 'fingerprint':
-        source = request['source']
-        dataset = str(Path(source['path']) / source['layer'])
-        if not arcpy.Exists(dataset):
-            raise ValueError(f'Geodatabase dataset does not exist: {dataset}')
-        desc = arcpy.Describe(dataset)
-        if desc.dataType == 'RasterDataset':
-            try:
-                mean = float(arcpy.management.GetRasterProperties(dataset, 'MEAN').getOutput(0))
-            except Exception:
-                mean = 0.0
-            return {'path': dataset, 'layer': source['layer'], 'type': 'raster', 'mean': mean}
-        else:
-            return {'path': dataset, 'layer': source['layer'], 'type': desc.dataType, 'count': int(arcpy.management.GetCount(dataset).getOutput(0))}
-
     source = request['source']
     dataset = str(Path(source['path']) / source['layer'])
     if not arcpy.Exists(dataset):
         raise ValueError(f'Geodatabase dataset does not exist: {dataset}')
     rows = []
     scale, offset = float(source['z_scale_to_m']), float(source['z_offset_m'])
+    if not math.isfinite(scale) or not math.isfinite(offset) or scale <= 0:
+        raise ValueError('Survey vertical scale must be positive and finite; offset finite.')
     if source['kind'] == 'gdb_raster':
         sampling = source.get('sampling', 'nearest')
         if sampling not in ('nearest', 'bilinear'):
@@ -100,6 +92,8 @@ def execute(request):
         try:
             values = sample_raster_batch(arcpy, dataset, knots, analysis_sr, raster_sr, transformation, sampling)
         except Exception as exc:
+            if sampling == 'bilinear':
+                raise ValueError(f'Bilinear raster sampling failed; nearest-cell substitution is not permitted: {exc}') from exc
             sys.stderr.write(f'Batch raster sampling failed ({exc}); falling back to per-point sampling.\n')
         if values is None:
             values = []
@@ -110,7 +104,7 @@ def execute(request):
                 values.append(None if value.strip().lower() in ('nodata', 'no data', '') else float(value))
         for knot, raw in zip(knots, values):
             rows.append({'xs_id': knot['xs_id'], 'u_m': knot['u_m'],
-                         'z_m': None if raw is None else raw * scale + offset})
+                         'z_m': None if raw is None or not math.isfinite(raw) else raw * scale + offset})
     elif source['kind'] == 'gdb_points':
         if source.get('transect_station_mapping_verified') is not True:
             raise ValueError('SB points require verified cross-section IDs and lateral station mapping; XY nearest matching is not assumed.')
@@ -120,34 +114,39 @@ def execute(request):
         if not set(names) <= available:
             raise ValueError(f'Required SB fields absent: {set(names)-available}')
         selected = {k['xs_id'] for k in request['knots']}
+        u_scale = float(source['u_scale_to_m'])
+        if not math.isfinite(u_scale) or u_scale <= 0:
+            raise ValueError('Survey lateral station scale must be positive and finite.')
         with arcpy.da.SearchCursor(dataset, names) as cursor:
             for xs_id, u, z in cursor:
                 if str(xs_id) in selected:
                     if u is None:
                         raise ValueError('SB point has no lateral station.')
-                    rows.append({'xs_id': str(xs_id), 'u_m': float(u) * float(source['u_scale_to_m']),
-                                 'z_m': None if z is None else float(z) * scale + offset})
+                    rows.append({'xs_id': str(xs_id), 'u_m': float(u) * u_scale,
+                                 'z_m': None if z is None or not math.isfinite(z) else float(z) * scale + offset})
     elif source['kind'] == 'gdb_points_raw':
         # New mode: extract all (x,y,z) for spatial mapping in python
         elevation_field = source.get('elevation_field', 'Elevation')
         available = {f.name for f in arcpy.ListFields(dataset)}
         if elevation_field not in available:
-            if 'Z' in available:
-                elevation_field = 'Z'
-            else:
-                raise ValueError(f'Required SB elevation field {elevation_field} absent.')
+            raise ValueError(f'Required SB elevation field {elevation_field} absent; configure the actual elevation field explicitly.')
         
         raster_sr = arcpy.Describe(dataset).spatialReference
         analysis_sr = spatial_reference(arcpy, request['analysis_crs'])
         transformation = source.get('horizontal_transformation', '')
+        if not raster_sr or raster_sr.name == 'Unknown':
+            raise ValueError('XYZ point source has no known horizontal CRS.')
+        if analysis_sr.GCS.name != raster_sr.GCS.name and not transformation:
+            raise ValueError('Different XYZ/analysis horizontal datums require an explicit transformation.')
 
         with arcpy.da.SearchCursor(dataset, ['SHAPE@XY', elevation_field]) as cursor:
             for shape, z in cursor:
-                if shape and z is not None:
+                if shape:
                     pt = arcpy.PointGeometry(arcpy.Point(shape[0], shape[1]), raster_sr)
                     if raster_sr.name != analysis_sr.name:
                         pt = pt.projectAs(analysis_sr, transformation) if transformation else pt.projectAs(analysis_sr)
-                    rows.append({'x_m': pt.firstPoint.X, 'y_m': pt.firstPoint.Y, 'z_m': float(z) * scale + offset})
+                    rows.append({'x_m': pt.firstPoint.X, 'y_m': pt.firstPoint.Y,
+                                 'z_m': None if z is None or not math.isfinite(z) else float(z) * scale + offset})
     else:
         raise ValueError('Unsupported geodatabase source kind.')
     if not rows and source['kind'] != 'gdb_points_raw':

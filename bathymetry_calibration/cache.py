@@ -7,9 +7,9 @@ import tempfile
 
 import pandas as pd
 
-from .core import normalize_profile
+from .qaqc import survey_frame
 
-SCHEMA = 'bathy-profile-v1'
+SCHEMA = 'bathy-raw-survey-v2'
 
 
 def digest_file(path):
@@ -34,19 +34,13 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
 
-def cache_key(source, transect_path, settings):
-    if str(source.get('path')).endswith('.gdb'):
-        from .sources import arcpy_request
-        try:
-            fp = arcpy_request({'operation': 'fingerprint', 'source': source, 'analysis_crs': settings.get('analysis_crs')}, settings.get('arcpy_python'))
-        except Exception:
-            fp = fingerprint(source['path'])
-    else:
-        fp = fingerprint(source['path'])
-        
+def cache_key(source, transect_path, settings, *, source_fingerprint=None, transect_fingerprint=None):
+    # Raster mean/point count cannot detect spatial edits with unchanged totals.
+    # Share full fingerprints within a run, without weakening invalidation.
+    source = {key: value for key, value in source.items() if key != 'qaqc'}
     return hashlib.sha256(canonical({'schema': SCHEMA, 'source': source,
-        'source_fingerprint': fp,
-        'transects': fingerprint(transect_path), 'settings': settings}).encode()).hexdigest()
+        'source_fingerprint': source_fingerprint or fingerprint(source['path']),
+        'transects': transect_fingerprint or fingerprint(transect_path), 'settings': settings}).encode()).hexdigest()
 
 
 class ProfileCache:
@@ -65,14 +59,16 @@ class ProfileCache:
                 return None
             if hashlib.sha256(canonical(records).encode()).hexdigest() != payload['records_sha256']:
                 return None
-            return normalize_profile(pd.DataFrame(records))
-        except (ValueError, KeyError, TypeError):
+            frame = survey_frame(pd.DataFrame(records))
+            frame.attrs.update(payload.get('metadata', {}))
+            return frame
+        except (OSError, ValueError, KeyError, TypeError):
             return None
 
     def put(self, key, frame):
-        frame = normalize_profile(frame)
+        frame = survey_frame(frame)
         records = frame.astype(object).where(frame.notna(), None).to_dict('records')
-        payload = {'schema': SCHEMA, 'key': key, 'records': records,
+        payload = {'schema': SCHEMA, 'key': key, 'records': records, 'metadata': frame.attrs,
                    'records_sha256': hashlib.sha256(canonical(records).encode()).hexdigest()}
         fd, temporary = tempfile.mkstemp(dir=self.directory, suffix='.tmp')
         try:

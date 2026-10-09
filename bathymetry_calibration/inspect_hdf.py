@@ -1,25 +1,9 @@
-import h5py
+"""Inspect HDF layout/units without reading result arrays."""
+from pathlib import Path
 import sys
 
-def print_structure(name, obj):
-    print(name)
-    if isinstance(obj, h5py.Dataset):
-        print(f"  Shape: {obj.shape}, Type: {obj.dtype}")
-
-def main():
-    hdf_path = sys.argv[1]
-    with h5py.File(hdf_path, 'r') as h5:
-        print("Groups in Results/Sediment:")
-        try:
-            h5['Results/Sediment'].visititems(print_structure)
-        except KeyError:
-            print("No Results/Sediment")
-        
-        print("\nGroups in Results/Unsteady/Output:")
-        try:
-            h5['Results/Unsteady/Output'].visititems(print_structure)
-        except KeyError:
-            print("No Results/Unsteady/Output")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools.hdf_metadata import main
 
 if __name__ == '__main__':
     main()

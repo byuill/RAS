@@ -1,1 +1,1 @@
-"""Initial common-cross-section bathymetry calibration workbench."""
+"""Matched bathymetry comparisons, spatial-pattern diagnostics, and survey QA/QC."""

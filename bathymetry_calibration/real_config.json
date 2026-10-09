@@ -1,7 +1,7 @@
 {
   "cache_dir": "E:/LMR Comp Phase 2/Calibration_2004_2025/sediment_calibration/Bathy_compare/cache",
   "transects": "E:/LMR Comp Phase 2/Calibration_2004_2025/sediment_calibration/Bathy_compare/transects.csv",
-  "analysis_crs": "EPSG:102039",
+  "analysis_crs": "ESRI:102039",
   "arcpy_python": "C:/Program Files/ArcGIS/Pro/bin/Python/envs/arcgispro-py3/python.exe",
   "spatial_mapping_verified": true,
   "temporal_alignment_verified": true,
