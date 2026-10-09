@@ -5,14 +5,136 @@ from pathlib import Path
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
-from PySide6.QtCore import QTimer, Signal
+from PySide6.QtCore import QTimer, Signal, QRunnable, QThreadPool, QObject
 from PySide6.QtWidgets import (QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
     QLineEdit, QMainWindow, QMessageBox, QPushButton, QTextEdit, QVBoxLayout, QWidget)
 
-from gui.workers import WorkerManager
-from tools.hdf_metadata import metadata_report
 from .sources import arcpy_request, model_times
 from .workflow import export_comparison, load_config, run_comparison
+
+
+class WorkerSignals(QObject):
+    finished = Signal(object)
+    error = Signal(Exception)
+
+
+class Worker(QRunnable):
+    def __init__(self, func):
+        super().__init__()
+        self.func = func
+        self.signals = WorkerSignals()
+
+    def run(self):
+        try:
+            result = self.func()
+            self.signals.finished.emit(result)
+        except Exception as e:
+            self.signals.error.emit(e)
+
+
+class WorkerManager:
+    def __init__(self, parent):
+        self.pool = QThreadPool()
+
+    def submit(self, name, func, success, error):
+        worker = Worker(func)
+        worker.signals.finished.connect(success)
+        worker.signals.error.connect(error)
+        self.pool.start(worker)
+
+    def idle(self):
+        return self.pool.activeThreadCount() == 0
+
+
+import pandas as pd
+import numpy as np
+
+class DiagnosticPlotsWindow(QMainWindow):
+    def __init__(self, result, provenance, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Diagnostic Plots")
+        self.resize(1000, 1100)
+        self.figure = Figure(figsize=(10, 12), constrained_layout=True)
+        self.canvas = FigureCanvasQTAgg(self.figure)
+        
+        central = QWidget()
+        layout = QVBoxLayout(central)
+        layout.addWidget(NavigationToolbar2QT(self.canvas, self))
+        layout.addWidget(self.canvas)
+        self.setCentralWidget(central)
+        
+        axs = self.figure.subplots(5, 1, sharex=True)
+        sections = result.sections.copy()
+        
+        m_to_ft = 3.280839895
+        m3_to_cy = 1.307950619
+        
+        t1 = pd.to_datetime(provenance['model_before_time'])
+        t2 = pd.to_datetime(provenance['model_after_time'])
+        years = (t2 - t1).total_seconds() / (365.25 * 24 * 3600)
+        if years <= 0:
+            years = 1.0
+        
+        sections['RM'] = pd.to_numeric(sections['xs_id'], errors='coerce')
+        sections = sections.dropna(subset=['RM']).sort_values('RM')
+        rm = sections['RM']
+        
+        min_rm, max_rm = rm.min(), rm.max()
+        bins = np.arange(np.floor(min_rm/10)*10, np.ceil(max_rm/10)*10 + 10, 10)
+        sections['rm_bin'] = pd.cut(sections['RM'], bins=bins, right=False)
+        
+        if 'model_baseline_elev_m' in sections and 'model_target_elev_m' in sections:
+            axs[0].plot(rm, sections['model_baseline_elev_m'] * m_to_ft, label='Baseline Bed Elev', color='blue')
+            axs[0].plot(rm, sections['model_target_elev_m'] * m_to_ft, label='Target Bed Elev', color='orange', linestyle='--')
+            axs[0].set_ylabel("Elevation (feet)")
+            axs[0].set_title("Model Baseline vs Target Bed Elevation")
+            axs[0].legend()
+            
+            sections['model_elev_change_ft_yr'] = ((sections['model_target_elev_m'] - sections['model_baseline_elev_m']) * m_to_ft) / years
+            sections['obs_elev_change_ft_yr'] = ((sections['observed_target_elev_m'] - sections['observed_baseline_elev_m']) * m_to_ft) / years
+            elev_binned = sections.groupby('rm_bin', observed=True)[['model_elev_change_ft_yr', 'obs_elev_change_ft_yr']].mean().reset_index()
+            elev_binned['bin_center'] = elev_binned['rm_bin'].apply(lambda x: x.mid).astype(float)
+            axs[4].plot(elev_binned['bin_center'], elev_binned['model_elev_change_ft_yr'], label='Model', color='blue', marker='o')
+            axs[4].plot(elev_binned['bin_center'], elev_binned['obs_elev_change_ft_yr'], label='Observed', color='orange', marker='s', linestyle='--')
+            axs[4].set_ylabel("Elev Change (ft/yr)")
+            axs[4].set_title(f"Average Bed Elevation Change per Year ({years:.1f} years)")
+            axs[4].axhline(0, color='black', linewidth=0.8)
+            axs[4].set_xlabel("River Mile")
+            axs[4].legend()
+        else:
+            axs[4].set_xlabel("River Mile")
+            
+        binned = sections.groupby('rm_bin', observed=True).agg({
+            'model_local_control_volume_m3': 'sum',
+            'observed_local_control_volume_m3': 'sum',
+            'effective_width_m': 'mean'
+        }).reset_index()
+        
+        binned['bin_center'] = binned['rm_bin'].apply(lambda x: x.mid).astype(float)
+        width = 3.0
+        
+        axs[1].bar(binned['bin_center'] - width/2, binned['model_local_control_volume_m3'] * m3_to_cy, width=width, label='Model')
+        axs[1].bar(binned['bin_center'] + width/2, binned['observed_local_control_volume_m3'] * m3_to_cy, width=width, label='Observed')
+        axs[1].set_ylabel("Volume Change (cy)")
+        axs[1].set_title("Volume of Bed Sediment Change (10 RM Bins)")
+        axs[1].legend()
+        axs[1].axhline(0, color='black', linewidth=0.8)
+            
+        axs[2].bar(binned['bin_center'] - width/2, (binned['model_local_control_volume_m3'] * m3_to_cy) / years, width=width, label='Model')
+        axs[2].bar(binned['bin_center'] + width/2, (binned['observed_local_control_volume_m3'] * m3_to_cy) / years, width=width, label='Observed')
+        axs[2].set_ylabel("Vol Change / Year (cy/yr)")
+        axs[2].set_title(f"Annual Averaged Volume Change ({years:.1f} years)")
+        axs[2].legend()
+        axs[2].axhline(0, color='black', linewidth=0.8)
+        
+        axs[3].plot(binned['bin_center'], binned['effective_width_m'] * m_to_ft, label='Model Width', linewidth=4, color='blue')
+        axs[3].plot(binned['bin_center'], binned['effective_width_m'] * m_to_ft, label='Observed Width', linestyle='--', linewidth=2, color='orange')
+        axs[3].set_ylabel("Width (feet)")
+        axs[3].set_title("Channel Width (10 RM Average)")
+        axs[3].legend()
+        
+        self.canvas.draw_idle()
+
 
 
 class CalibrationWindow(QMainWindow):
@@ -40,6 +162,8 @@ class CalibrationWindow(QMainWindow):
         self.compare_button = QPushButton('Process / compare (reuse survey cache)')
         self.export_button = QPushButton('Export CSV, provenance, and plot')
         self.export_button.setEnabled(False)
+        self.diagnostic_button = QPushButton('Diagnostic Plots')
+        self.diagnostic_button.setEnabled(False)
         self.figure = Figure(figsize=(10, 6), constrained_layout=True)
         self.canvas = FigureCanvasQTAgg(self.figure)
         self.message = QTextEdit()
@@ -65,7 +189,7 @@ class CalibrationWindow(QMainWindow):
         row = QHBoxLayout()
         for button, callback in [(self.load_button, self.load), (self.inspect_button, self.inspect),
                                  (self.inventory_button, self.inventory), (self.compare_button, self.compare),
-                                 (self.export_button, self.export)]:
+                                 (self.diagnostic_button, self.show_diagnostics), (self.export_button, self.export)]:
             button.clicked.connect(callback)
             row.addWidget(button)
         layout.addLayout(row)
@@ -96,10 +220,12 @@ class CalibrationWindow(QMainWindow):
                        self.before_time, self.after_time):
             widget.setEnabled(not busy)
         self.export_button.setEnabled(not busy and self.result is not None)
+        self.diagnostic_button.setEnabled(not busy and self.result is not None)
 
     def _invalidate_result(self, *_):
         self.result = self.provenance = None
         self.export_button.setEnabled(False)
+        self.diagnostic_button.setEnabled(False)
         self.figure.clear()
         self.canvas.draw_idle()
 
@@ -186,26 +312,40 @@ class CalibrationWindow(QMainWindow):
         self._busy(False)
         self.figure.clear()
         upper, lower = self.figure.subplots(2, 1)
-        sections, intervals = self.result.sections, self.result.intervals
-        x = sections.chainage_m / 1000
-        upper.plot(x, sections.model_cumulative_m3, label='Model: common profiles')
-        upper.plot(x, sections.observed_cumulative_m3, label='Observed: common profiles')
+        sections, intervals = self.result.sections.copy(), self.result.intervals.copy()
+        
+        m3_to_cy = 1.307950619
+        m2_to_sqft = 10.7639104
+        
+        sections['RM'] = pd.to_numeric(sections['xs_id'], errors='coerce')
+        x = sections['RM']
+        
+        upper.plot(x, sections.model_cumulative_m3 * m3_to_cy, label='Model: common profiles')
+        upper.plot(x, sections.observed_cumulative_m3 * m3_to_cy, label='Observed: common profiles')
         if 'native_cumulative_m3' in sections:
-            upper.plot(x, sections.native_cumulative_m3, '--', label='Native RAS: verification audit')
-        upper.set(xlabel='Downstream chainage (km)', ylabel='Cumulative bulk bed change (m³)',
+            upper.plot(x, sections.native_cumulative_m3 * m3_to_cy, '--', label='Native RAS: verification audit')
+        upper.set(xlabel='River Mile', ylabel='Cumulative bulk bed change (cubic yards)',
                   title=f'{self.provenance["survey_before"]} → {self.provenance["survey_after"]}: '
                         f'{self.provenance["model_before_time"]} → {self.provenance["model_after_time"]}')
         upper.axhline(0, color='grey', linewidth=.5)
+        upper.invert_xaxis()
         upper.legend()
+        
         mid = 0.5 * (x.to_numpy()[:-1]+x.to_numpy()[1:])
-        lower.plot(mid, intervals.model_volume_change_m3/intervals.length_m, label='Model')
-        lower.plot(mid, intervals.observed_volume_change_m3/intervals.length_m, label='Observed')
-        lower.set(xlabel='Downstream chainage (km)', ylabel='Interval volume / length (m²)')
+        lower.plot(mid, (intervals.model_volume_change_m3/intervals.length_m) * m2_to_sqft, label='Model')
+        lower.plot(mid, (intervals.observed_volume_change_m3/intervals.length_m) * m2_to_sqft, label='Observed')
+        lower.set(xlabel='River Mile', ylabel='Average Area Change (sq ft)')
+        lower.invert_xaxis()
         lower.legend()
         self.canvas.draw_idle()
         self.message.setPlainText(json.dumps(self.result.metrics, indent=2) + '\nCache: ' +
                                   ', '.join(f'{c["survey"]}: {"hit" if c["hit"] else "processed"}' for c in self.provenance['cache']))
         self.compared.emit(self.result)
+
+    def show_diagnostics(self):
+        if self.result is not None and self.provenance is not None:
+            self.diag_window = DiagnosticPlotsWindow(self.result, self.provenance, self)
+            self.diag_window.show()
 
     def export(self):
         directory = QFileDialog.getExistingDirectory(self, 'Select export parent folder')

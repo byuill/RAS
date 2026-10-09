@@ -1,0 +1,68 @@
+{
+  "cache_dir": "E:/LMR Comp Phase 2/Calibration_2004_2025/sediment_calibration/Bathy_compare/cache",
+  "transects": "E:/LMR Comp Phase 2/Calibration_2004_2025/sediment_calibration/Bathy_compare/transects.csv",
+  "analysis_crs": "EPSG:102039",
+  "arcpy_python": "C:/Program Files/ArcGIS/Pro/bin/Python/envs/arcgispro-py3/python.exe",
+  "spatial_mapping_verified": true,
+  "temporal_alignment_verified": true,
+  "vertical_datum": "NAVD88",
+  "survey_alignment_tolerance_days": 10.0,
+  "baseline_model_output_index": 3226,
+  "target_model_output_index": 7609,
+  "integration": {
+    "max_gap_m": 50.0,
+    "min_coverage": 0.5,
+    "max_reach_length_m": 10000.0,
+    "grid_spacing_m": 10.0,
+    "sample_spacing_m": 10.0,
+    "min_common_width_m": 50.0
+  },
+  "model": {
+    "kind": "hdf_profiles",
+    "path": "E:/LMR Comp Phase 2/Calibration_2004_2025/sediment_calibration/model_template_Ver1/R1_Dyn_SLR1.p01.hdf",
+    "profile_mapping_verified": true,
+    "layout": "ragged_se",
+    "se_group": "Results/Sediment/Output Blocks/Sediment SE/Sediment Time Series/Cross Section SE",
+    "time_dataset": "Results/Sediment/Output Blocks/Sediment SE/Sediment Time Series/Time Date Stamp",
+    "u_scale_to_m": 0.3048,
+    "u_offset_m": 0.0,
+    "z_scale_to_m": 0.3048,
+    "z_offset_m": 0.0,
+    "vertical_datum": "NAVD88",
+    "vertical_alignment_verified": true
+  },
+  "native_volume": {
+    "path": "E:/LMR Comp Phase 2/Calibration_2004_2025/sediment_calibration/model_template_Ver1/R1_Dyn_SLR1.p01.hdf",
+    "dataset": "Results/Sediment/Output Blocks/Sediment/Sediment Time Series/Cross Sections/Vol Bed Change Cum",
+    "verified": true,
+    "evidence": "Verified in docs/bathymetry-native-accounting.md",
+    "semantics": "local_temporally_cumulative",
+    "basis": "bulk_geometric",
+    "scale_to_m3": 0.028316846592,
+    "deposition_sign": 1.0
+  },
+  "surveys": {
+    "baseline": {
+      "kind": "gdb_raster",
+      "path": "E:/LMR Comp Phase 2/Calibration_2004_2025/sediment_calibration/Bathymetry_Files/LMR_Bathy.gdb",
+      "layer": "MB_2012",
+      "date": "2012-10-31",
+      "z_scale_to_m": 1.0,
+      "z_offset_m": 0.0,
+      "sampling": "bilinear",
+      "vertical_datum": "NAVD88",
+      "vertical_alignment_verified": true
+    },
+    "target": {
+      "kind": "gdb_raster",
+      "path": "E:/LMR Comp Phase 2/Calibration_2004_2025/sediment_calibration/Bathymetry_Files/LMR_Bathy.gdb",
+      "layer": "MB_2025",
+      "date": "2024-10-31",
+      "z_scale_to_m": 1.0,
+      "z_offset_m": 0.0,
+      "sampling": "bilinear",
+      "vertical_datum": "NAVD88",
+      "vertical_alignment_verified": true
+    }
+  }
+}

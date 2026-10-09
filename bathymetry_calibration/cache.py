@@ -35,8 +35,17 @@ def canonical(value):
 
 
 def cache_key(source, transect_path, settings):
+    if str(source.get('path')).endswith('.gdb'):
+        from .sources import arcpy_request
+        try:
+            fp = arcpy_request({'operation': 'fingerprint', 'source': source, 'analysis_crs': settings.get('analysis_crs')}, settings.get('arcpy_python'))
+        except Exception:
+            fp = fingerprint(source['path'])
+    else:
+        fp = fingerprint(source['path'])
+        
     return hashlib.sha256(canonical({'schema': SCHEMA, 'source': source,
-        'source_fingerprint': fingerprint(source['path']),
+        'source_fingerprint': fp,
         'transects': fingerprint(transect_path), 'settings': settings}).encode()).hexdigest()
 
 

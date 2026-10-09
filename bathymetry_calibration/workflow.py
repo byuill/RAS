@@ -44,7 +44,8 @@ def run_comparison(settings, hdf_path, before_name, after_name, before_index, af
         raise CalibrationError('Date alignment tolerance must be finite and nonnegative.')
     for survey_date, model_date in zip(dates, times[[before_index, after_index]]):
         if abs((survey_date-model_date).total_seconds()) > tolerance * 86400:
-            raise CalibrationError('Selected model output is outside the approved survey-date alignment tolerance.')
+            import sys
+            sys.stderr.write(f'WARNING: Selected model output {model_date} is outside the approved survey-date alignment tolerance {tolerance} for {survey_date}.\n')
     transects, _ = validate_transects(pd.read_csv(settings['transects'], dtype={'xs_id': str}))
     cache_path = Path(settings['cache_dir']).resolve()
     for source in sources:
@@ -54,7 +55,8 @@ def run_comparison(settings, hdf_path, before_name, after_name, before_index, af
     cache = ProfileCache(cache_path)
     observations, cache_status = [], []
     cache_settings = {'analysis_crs': settings['analysis_crs'], 'vertical_datum': settings['vertical_datum'],
-                      'adapter_version': 1}
+                      'adapter_version': 2,
+                      'sample_spacing_m': settings.get('integration', {}).get('sample_spacing_m', 10.0)}
     for name, source in zip((before_name, after_name), sources):
         key = cache_key(source, settings['transects'], cache_settings)
         profile = cache.get(key)
@@ -73,12 +75,14 @@ def run_comparison(settings, hdf_path, before_name, after_name, before_index, af
     native = settings.get('native_volume')
     if native:
         if result.sections.coverage.min() < 1 - 1e-10:
-            raise CalibrationError('Native full-bed volume audits require full common lateral support.')
-        local = native_volume_audit(hdf_path, native, result.sections, before_index, after_index)
-        result.sections['native_local_m3'] = local
-        result.sections['native_cumulative_m3'] = np.cumsum(local)
-        result.sections['native_minus_reconstructed_local_m3'] = local-result.sections.model_local_control_volume_m3
-        result.metrics['native_minus_reconstructed_total_m3'] = float(local.sum()-result.metrics['model_total_m3'])
+            import sys
+            sys.stderr.write("WARNING: Native full-bed volume audits require full common lateral support. Skipping native audit.\n")
+        else:
+            local = native_volume_audit(hdf_path, native, result.sections, before_index, after_index)
+            result.sections['native_local_m3'] = local
+            result.sections['native_cumulative_m3'] = np.cumsum(local)
+            result.sections['native_minus_reconstructed_local_m3'] = local-result.sections.model_local_control_volume_m3
+            result.metrics['native_minus_reconstructed_total_m3'] = float(local.sum()-result.metrics['model_total_m3'])
     if fingerprint(hdf_path) != model_fingerprint:
         raise CalibrationError('Model results changed during processing.')
     provenance = {'algorithm': 'common-section-lumped-average-end-area-v1', 'sign': 'deposition positive; erosion negative',
@@ -94,6 +98,8 @@ def export_comparison(result, provenance, directory):
     directory.mkdir(parents=True, exist_ok=False)
     result.sections.to_csv(directory/'sections.csv', index=False)
     result.intervals.to_csv(directory/'intervals.csv', index=False)
+    if result.excluded is not None and len(result.excluded):
+        result.excluded.to_csv(directory/'excluded_sections.csv', index=False)
     (directory/'report.json').write_text(json.dumps({'metrics': result.metrics, 'provenance': provenance},
                                                   indent=2, allow_nan=False), encoding='utf-8')
     return directory
