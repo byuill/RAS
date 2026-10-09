@@ -1,0 +1,54 @@
+{
+  "analysis_crs": "REPLACE_WITH_PROJECTED_METRE_CRS",
+  "vertical_datum": "REPLACE_WITH_VERIFIED_COMMON_VERTICAL_DATUM",
+  "spatial_mapping_verified": false,
+  "temporal_alignment_verified": false,
+  "survey_alignment_tolerance_days": 0,
+  "arcpy_python": null,
+  "transects": "REPLACE_WITH_COMMON_TRANSECTS.csv",
+  "cache_dir": "E:\\LMR Comp Phase 2\\Calibration_2004_2025\\sediment_calibration\\Bathymetry_Files\\calibration_cache",
+  "surveys": {
+    "MB_2012": {
+      "kind": "gdb_raster",
+      "path": "E:\\LMR Comp Phase 2\\Calibration_2004_2025\\sediment_calibration\\Bathymetry_Files\\LMR_Bathy.gdb",
+      "layer": "MB_2012",
+      "date": null,
+      "vertical_datum": "REPLACE_WITH_VERIFIED_COMMON_VERTICAL_DATUM",
+      "vertical_alignment_verified": false,
+      "z_scale_to_m": 1,
+      "z_offset_m": 0,
+      "sampling": "nearest",
+      "horizontal_transformation": ""
+    },
+    "MB_2025": {
+      "kind": "gdb_raster",
+      "path": "E:\\LMR Comp Phase 2\\Calibration_2004_2025\\sediment_calibration\\Bathymetry_Files\\LMR_Bathy.gdb",
+      "layer": "MB_2025",
+      "date": null,
+      "vertical_datum": "REPLACE_WITH_VERIFIED_COMMON_VERTICAL_DATUM",
+      "vertical_alignment_verified": false,
+      "z_scale_to_m": 1,
+      "z_offset_m": 0,
+      "sampling": "nearest",
+      "horizontal_transformation": ""
+    }
+  },
+  "model": {
+    "profile_mapping_verified": false,
+    "vertical_datum": "REPLACE_WITH_VERIFIED_COMMON_VERTICAL_DATUM",
+    "vertical_alignment_verified": false,
+    "elevation_dataset": "REPLACE_FROM_ACTUAL_EVOLVING_PROFILE_METADATA",
+    "station_dataset": "REPLACE_FROM_ACTUAL_PROFILE_METADATA",
+    "time_dataset": "REPLACE_FROM_ACTUAL_DATE_STAMP_METADATA",
+    "time_format": "hec",
+    "z_scale_to_m": 1,
+    "z_offset_m": 0,
+    "u_scale_to_m": 1,
+    "u_offset_m": 0
+  },
+  "integration": {
+    "max_gap_m": 25,
+    "min_coverage": 1,
+    "max_reach_length_m": 10000
+  }
+}
