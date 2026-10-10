@@ -1,3 +1,9 @@
+> The `new_bathy_compare` workflow now includes matched spatial-pattern metrics,
+> survey QA/QC, direct raster/XYZ CSV input, and comparisons across multiple dates.
+> See [README.md](README.md) for current commands, configuration, and validation.
+> The local-data/ArcGIS verification tasks below remain relevant; descriptions of
+> features in the earlier starter are historical.
+
 # Paste this prompt into the AI chat in VS Code on your local computer
 
 You are working locally in my `byuill/RAS` Python project. Complete and personalize

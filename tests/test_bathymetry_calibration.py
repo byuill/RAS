@@ -66,8 +66,12 @@ def test_no_nan_bridge_no_extrapolation_and_common_support(tmp_path):
     with pytest.raises(CalibrationError, match='coverage'):
         compare_profiles(transects, before, before, before, after)
     cropped = pd.read_csv(directory/'survey-after.csv').query('u_m > 0')
+    overlap = compare_profiles(transects, before, before, before, cropped)
+    assert overlap.sections.common_u_min_m.tolist() == [5, 5, 5]
+    assert overlap.metrics['minimum_footprint_coverage'] == .5
+    assert overlap.metrics['observed_total_m3'] == 1000
     with pytest.raises(CalibrationError, match='coverage'):
-        compare_profiles(transects, before, before, before, cropped)
+        compare_profiles(transects, before, before, before, cropped, domain_mode='transect')
     with pytest.raises(CalibrationError, match='coverage'):
         compare_profiles(transects, before, before, before, before, max_gap_m=4)
 
