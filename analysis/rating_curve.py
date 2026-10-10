@@ -44,6 +44,8 @@ def valid_xy(x, y, log_x: bool = False, log_y: bool = False) -> tuple[np.ndarray
     """Boolean mask of usable points for the chosen axis scaling, with a drop report."""
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
+    if x.ndim != 1 or y.shape != x.shape:
+        raise ValueError('Rating X and Y must be equally sized vectors.')
     finite = np.isfinite(x) & np.isfinite(y)
     mask = finite.copy()
     rep = DropReport(n_total=len(x), n_nan=int((~finite).sum()))
@@ -95,7 +97,7 @@ def _r_squared(y_actual: np.ndarray, y_predicted: np.ndarray) -> float:
     ss_res = np.sum((y_actual - y_predicted) ** 2)
     ss_tot = np.sum((y_actual - np.mean(y_actual)) ** 2)
     if ss_tot == 0:
-        return 0.0
+        return float('nan')  # R² is undefined for a constant response.
     return float(1.0 - ss_res / ss_tot)
 
 
@@ -107,7 +109,9 @@ def fit_power_law(x, y, min_points: int = 3, confidence: float = 0.95) -> PowerL
     """
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
-    ok = np.isfinite(x) & np.isfinite(y) & (x > 0) & (y > 0)
+    if not np.isfinite(confidence) or not 0 < confidence < 1:
+        raise ValueError('Regression confidence must lie strictly between zero and one.')
+    ok, _ = valid_xy(x, y, True, True)
     n = int(ok.sum())
     if n < max(min_points, 3):
         return None
@@ -132,12 +136,18 @@ def fit_loglog_poly(x, y, degree: int = 2, q_ref: float | None = None, min_point
     (highest power first as in ``np.polyfit``), R^2 in log space and a predict callable."""
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
-    ok = np.isfinite(x) & np.isfinite(y) & (x > 0) & (y > 0)
-    if ok.sum() < max(min_points, degree + 2):
+    if isinstance(degree, bool) or not isinstance(degree, int) or degree < 0:
+        raise ValueError('Log-polynomial degree must be a nonnegative integer.')
+    ok, _ = valid_xy(x, y, True, True)
+    if ok.sum() < max(min_points, degree + 2) or len(np.unique(x[ok])) < degree+1:
         return None
     q_ref = float(np.exp(np.mean(np.log(x[ok])))) if q_ref is None else q_ref
+    if not np.isfinite(q_ref) or q_ref <= 0:
+        raise ValueError('Reference discharge must be finite and positive.')
     lq, ly = np.log(x[ok] / q_ref), np.log(y[ok])
-    coeffs = np.polyfit(lq, ly, degree)
+    coeffs, _, rank, _, _ = np.polyfit(lq, ly, degree, full=True)
+    if rank < degree+1:
+        return None
     r2 = _r_squared(ly, np.polyval(coeffs, lq))
     return {"coeffs": coeffs, "q_ref": q_ref, "r2_log": r2, "n": int(ok.sum()), "degree": degree,
             "predict": lambda xv: np.exp(np.polyval(coeffs, np.log(np.asarray(xv, dtype=float) / q_ref)))}
@@ -147,11 +157,11 @@ def fit_rating_curve_legacy(x, y, min_points: int = 3) -> dict:
     """Power / linear / logarithmic / exponential fits (refactored from the original SedRatingCurve tool)."""
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
-    m = np.isfinite(x) & np.isfinite(y)
+    m, _ = valid_xy(x, y)
     x, y = x[m], y[m]
     fits: dict = {}
     pos = (x > 0) & (y > 0)
-    if pos.sum() >= min_points:
+    if pos.sum() >= min_points and np.unique(x[pos]).size >= 2:
         xb, yb = x[pos], y[pos]
         b, ln_a = np.polyfit(np.log(xb), np.log(yb), 1)
         a = np.exp(ln_a)
@@ -159,22 +169,24 @@ def fit_rating_curve_legacy(x, y, min_points: int = 3) -> dict:
         fits["power"] = {"params": {"a": a, "b": b}, "r_squared": _r_squared(np.log(yb), np.log(yp)),
                          "r_squared_linear": _r_squared(yb, yp), "n": int(pos.sum()),
                          "predict": lambda xv, a=a, b=b: a * np.maximum(np.asarray(xv, float), 1e-9) ** b}
-    if len(x) >= min_points:
+    if len(x) >= min_points and np.unique(x).size >= 2:
         a1, b1 = np.polyfit(x, y, 1)
         fits["linear"] = {"params": {"a": a1, "b": b1}, "r_squared": _r_squared(y, a1 * x + b1), "n": len(x),
                           "predict": lambda xv, a=a1, b=b1: a * np.asarray(xv, float) + b}
     px = x > 0
-    if px.sum() >= min_points:
+    if px.sum() >= min_points and np.unique(x[px]).size >= 2:
         a2, b2 = np.polyfit(np.log(x[px]), y[px], 1)
         fits["logarithmic"] = {"params": {"a": a2, "b": b2}, "r_squared": _r_squared(y[px], a2 * np.log(x[px]) + b2),
                                "n": int(px.sum()),
                                "predict": lambda xv, a=a2, b=b2: a * np.log(np.maximum(np.asarray(xv, float), 1e-9)) + b}
     py = y > 0
-    if py.sum() >= min_points:
+    if py.sum() >= min_points and np.unique(x[py]).size >= 2:
         b3, ln_a3 = np.polyfit(x[py], np.log(y[py]), 1)
         a3 = np.exp(ln_a3)
         fits["exponential"] = {"params": {"a": a3, "b": b3}, "r_squared": _r_squared(y[py], a3 * np.exp(b3 * x[py])),
                                "n": int(py.sum()), "predict": lambda xv, a=a3, b=b3: a * np.exp(b * np.asarray(xv, float))}
     if not fits:
         return {"fits": {}, "best_by_r2": None, "power_ok": False}
-    return {"fits": fits, "best_by_r2": max(fits, key=lambda k: fits[k]["r_squared"]), "power_ok": "power" in fits}
+    finite = [key for key in fits if np.isfinite(fits[key]['r_squared'])]
+    return {"fits": fits, "best_by_r2": max(finite, key=lambda k: fits[k]["r_squared"]) if finite else None,
+            "power_ok": "power" in fits}

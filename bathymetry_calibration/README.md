@@ -62,6 +62,16 @@ erosion through time; black dividers mark disconnected supported segments.
 
 ## Survey QA/QC
 
+**Calculation audit / assumptions** explains every lateral area, reach volume,
+control-volume contribution, and cumulative prefix with numeric ledgers and
+plots. Explore reconstruction methods, footprint trimming, coverage/gap limits,
+hypothetical survey shifts, thresholds, and correlated survey uncertainty.
+Gross erosion/deposition, cancellation, spatial variability, and active-width
+fractions expose opposing changes hidden by net averages. Scenarios preserve
+the reference and can be exported or rerun headlessly with `--sensitivity`.
+See the [calculation diagnostics guide](docs/calculation-diagnostics.md) for
+worked examples, formulas, interpretation limits, and export details.
+
 Survey QA/QC runs independently of model selection and before duplicate-resolution
 errors stop a comparison. It reviews the **extracted transect samples**, not every
 cell in the original terrain raster. Review full-raster seams/stripes, metadata,

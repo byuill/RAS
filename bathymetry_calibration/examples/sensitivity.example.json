@@ -1,0 +1,10 @@
+{
+  "scenarios": [
+    {"name": "Upstream reconstruction", "overrides": {"longitudinal_method": "upstream"}},
+    {"name": "Downstream reconstruction", "overrides": {"longitudinal_method": "downstream"}},
+    {"name": "Trim 10 percent per bank", "overrides": {"lateral_trim_fraction": 0.1}},
+    {"name": "Hypothetical target plus 0.10 m", "overrides": {"observed_target_shift_m": 0.1}},
+    {"name": "Classify at 0.25 m", "overrides": {"change_threshold_m": 0.25}},
+    {"name": "Refine integration grid", "overrides": {"grid_spacing_m": 2}}
+  ]
+}

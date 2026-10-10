@@ -37,6 +37,8 @@ def observed_series(obs_df: pd.DataFrame, var_key: str, group_key: str, kinds: l
               "Flux": "ssl_kg_s" if group_key == "total" else {"sand": "sand_mg_l", "fines": "fines_mg_l"}.get(group_key)}.get(var_key)
     if len(s) == len(d) and target:
         s = s.mask(excluded_mask(d, target))
+        if var_key == 'Flux' and group_key in ('sand', 'fines'):
+            s = s.mask(excluded_mask(d, 'discharge_m3s'))
     return s.dropna(), note
 
 
@@ -49,6 +51,8 @@ def observed_rating_pairs(obs_df: pd.DataFrame, x_key: str, y_key: str, group_ke
     if y.empty:
         return pd.DataFrame(columns=["x", "y"])
     d = obs_df if not kinds else obs_df[obs_df["kind"].isin(kinds)]
-    x = d["discharge_m3s"] if x_key == "Q" else d["stage_elev_m"]
+    from observations.qaqc import excluded_mask
+    driver = 'discharge_m3s' if x_key == 'Q' else 'stage_elev_m'
+    x = d[driver].mask(excluded_mask(d, driver))
     out = pd.DataFrame({"x": x, "y": y}).dropna()
     return out

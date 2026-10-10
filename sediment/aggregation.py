@@ -47,6 +47,9 @@ def aggregate(values: np.ndarray, class_indices: list[int], group: SedimentGroup
     ``class_indices`` maps array columns to 1-based grain-class numbers.
     """
     if group.kind == "static":
+        if not set(group.class_indices) <= set(class_indices):
+            # Missing members make a partial group sum unknowable, not a smaller total.
+            return np.full(values.shape[0], np.nan)
         pos = [class_indices.index(k) for k in group.class_indices if k in class_indices]
         return sum_classes(values, pos)
     if rouse is None or cfg is None:

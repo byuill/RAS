@@ -14,6 +14,7 @@ from gui.workers import WorkerManager
 from tools.hdf_metadata import metadata_report
 from .plots import draw_comparison, draw_diagnostics, draw_section, draw_time_series
 from .qaqc_gui import SurveyQaqcWindow
+from .calculation_gui import CalculationAuditWindow
 from .sources import arcpy_request, model_times
 from .workflow import (export_comparison, export_time_series, load_config, match_survey_times,
                        run_comparison, run_survey_qaqc, run_time_series)
@@ -93,6 +94,7 @@ class CalibrationWindow(QMainWindow):
         self.series_button = QPushButton('Compare all survey intervals')
         self.diagnostic_button = QPushButton('Pattern diagnostics')
         self.profile_button = QPushButton('Cross-section profiles')
+        self.audit_button = QPushButton('Calculation audit / assumptions')
         self.export_button = QPushButton('Export results and plots')
         self.save_config_button = QPushButton('Save configuration copy')
         self.cancel_button = QPushButton('Cancel operation')
@@ -124,9 +126,9 @@ class CalibrationWindow(QMainWindow):
         for choices in [[(self.load_button, self.load), (self.inspect_button, self.inspect),
                          (self.inventory_button, self.inventory), (self.qaqc_button, self.review_surveys)],
                         [(self.compare_button, self.compare), (self.series_button, self.compare_series),
-                         (self.diagnostic_button, self.show_diagnostics), (self.profile_button, self.show_profiles),
-                         (self.export_button, self.export), (self.save_config_button, self.save_config),
-                         (self.cancel_button, self.cancel)]]:
+                         (self.save_config_button, self.save_config), (self.cancel_button, self.cancel)],
+                        [(self.diagnostic_button, self.show_diagnostics), (self.profile_button, self.show_profiles),
+                         (self.audit_button, self.show_calculation_audit), (self.export_button, self.export)]]:
             actions = QHBoxLayout()
             for button, callback in choices:
                 button.clicked.connect(callback)
@@ -162,6 +164,7 @@ class CalibrationWindow(QMainWindow):
         self.export_button.setEnabled(not busy and (self.result is not None or self.series is not None))
         self.diagnostic_button.setEnabled(not busy and self.result is not None)
         self.profile_button.setEnabled(not busy and self.result is not None)
+        self.audit_button.setEnabled(not busy and self.result is not None)
         self.cancel_button.setEnabled(busy)
 
     def _invalidate_result(self, *_):
@@ -169,7 +172,8 @@ class CalibrationWindow(QMainWindow):
         self.export_button.setEnabled(False)
         self.diagnostic_button.setEnabled(False)
         self.profile_button.setEnabled(False)
-        for attribute in ('diag_window', 'profile_window'):
+        self.audit_button.setEnabled(False)
+        for attribute in ('diag_window', 'profile_window', 'audit_window'):
             window = getattr(self, attribute, None)
             if window:
                 window.close()
@@ -359,6 +363,11 @@ class CalibrationWindow(QMainWindow):
         if self.result is not None:
             self.profile_window = SectionProfilesWindow(self.result, self)
             self.profile_window.show()
+
+    def show_calculation_audit(self):
+        if self.result is not None:
+            self.audit_window = CalculationAuditWindow(self.result, self.provenance, self)
+            self.audit_window.show()
 
     def export(self):
         if self.result is None and self.series is None:

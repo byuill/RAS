@@ -3,9 +3,11 @@ import numpy as np
 
 
 def segment_lines(axis, table, columns):
-    for column, label, style in columns:
+    colors = ('#2166ac', '#b35806', '#555555', '#762a83')
+    for color, (column, label, style) in zip(colors, columns):
         for i, (_, group) in enumerate(table.groupby('segment_id', sort=False)):
-            axis.plot(group.chainage_m/1000, group[column], style, label=label if i == 0 else None)
+            axis.plot(group.chainage_m/1000, group[column], style, color=color,
+                      label=label if i == 0 else None)
     axis.set_xlabel('Downstream chainage (km)')
 
 
@@ -16,8 +18,10 @@ def draw_comparison(figure, result, provenance):
     if 'native_cumulative_m3' in result.sections:
         columns.append(('native_cumulative_m3', 'Native RAS audit', ':'))
     segment_lines(upper, result.sections, columns)
-    upper.set_ylabel('Cumulative bed change per segment (m³)')
+    upper.set_ylabel('Node cumulative bed change per segment (m³)')
     upper.set_title(f'{provenance["survey_before"]} → {provenance["survey_after"]}')
+    upper.text(.01, .02, 'Node sum includes the first half-reach contribution; resets at gaps.',
+               transform=upper.transAxes, fontsize=8)
     segment_lines(lower, result.sections, [('model_mean_change_m', 'Model', '-'),
                                           ('observed_mean_change_m', 'Observed', '--')])
     lower.set_ylabel('Mean bed elevation change (m)')
@@ -125,3 +129,104 @@ def draw_time_series(figure, series):
         for index in np.flatnonzero(boundaries):
             axis.axvline(index-.5, color='black', linewidth=2)
     figure.suptitle('Consecutive survey intervals on fixed support; rates use each source’s dates')
+
+
+def draw_calculation_audit(figure, result, xs_id, reference=None, cumulative='node'):
+    """Calculation stages, with consistent source colors and explicit prefix semantics."""
+    figure.clear()
+    axes = figure.subplots(2, 2)
+    table = result.sections
+    suffix = 'cumulative_m3' if cumulative == 'node' else 'interval_prefix_m3'
+    columns = [(f'model_{suffix}', 'Model', '-'), (f'observed_{suffix}', 'Observed', '--')]
+    segment_lines(axes[0, 0], table, columns)
+    if reference is not None:
+        for source, color in [('model', '#2166ac'), ('observed', '#b35806')]:
+            for i, (_, group) in enumerate(reference.sections.groupby('segment_id', sort=False)):
+                axes[0, 0].plot(group.chainage_m/1000, group[f'{source}_{suffix}'], ':',
+                    color=color, alpha=.45, label=f'{source.capitalize()} reference' if i == 0 else None)
+    axes[0, 0].set(ylabel='Signed cumulative change (m³)',
+        title='Node control-volume sum' if cumulative == 'node' else 'Completed-reach prefix (starts at zero)')
+    interval = result.intervals
+    x = interval.mid_chainage_m.to_numpy()/1000
+    # Thin paired markers retain readability when reach lengths are very unequal.
+    for source, marker, color in [('model', 'o', '#2166ac'), ('observed', 's', '#b35806')]:
+        axes[0, 1].vlines(x, 0, interval[f'{source}_volume_change_m3'], color=color, alpha=.35)
+        axes[0, 1].scatter(x, interval[f'{source}_volume_change_m3'], marker=marker, color=color, s=20, label=source.capitalize())
+    axes[0, 1].set(xlabel='Reach midpoint chainage (km)', ylabel='Reach volume change (m³)',
+                   title='Endpoint areas × verified reach length')
+    data = result.profiles[result.profiles.xs_id == xs_id]
+    accepted = np.flatnonzero(data.accepted_interval_to_next.to_numpy())
+    u = np.full(len(accepted)*3, np.nan)
+    u[::3], u[1::3] = data.u_m.to_numpy()[accepted], data.u_m.to_numpy()[accepted+1]
+    for source, color, style in [('model', '#2166ac', '-'), ('observed', '#b35806', '--')]:
+        z = np.full(len(u), np.nan)
+        z[::3], z[1::3] = data[f'{source}_change_m'].to_numpy()[accepted], data[f'{source}_change_m'].to_numpy()[accepted+1]
+        axes[1, 0].plot(u, z, style, color=color, label=source.capitalize())
+        axes[1, 0].fill_between(u, 0, z, color=color, alpha=.16)
+    threshold = result.metrics['change_detection_threshold_m']
+    axes[1, 0].axhspan(-threshold, threshold, color='grey', alpha=.12, label='Classification threshold')
+    axes[1, 0].set(xlabel='Lateral station (m)', ylabel='Target − baseline (m)',
+                   title=f'XS {xs_id}: shaded integral gives ΔA (m²)')
+    for source, color in [('model', '#2166ac'), ('observed', '#b35806')]:
+        for i, (_, group) in enumerate(table.groupby('segment_id', sort=False)):
+            axes[1, 1].plot(group.chainage_m/1000, group[f'{source}_deposition_cumulative_m3'], '-', color=color,
+                            label=f'{source.capitalize()} deposition' if i == 0 else None)
+            axes[1, 1].plot(group.chainage_m/1000, -group[f'{source}_erosion_cumulative_m3'], '--', color=color,
+                            label=f'{source.capitalize()} erosion (negative)' if i == 0 else None)
+    axes[1, 1].set(xlabel='Downstream chainage (km)', ylabel='Node cumulative components (m³)',
+                   title='Opposing changes hidden by net averages')
+    for axis in axes.flat:
+        axis.axhline(0, color='grey', linewidth=.7)
+        axis.grid(alpha=.2)
+        axis.legend(fontsize=7)
+    figure.suptitle('Calculation audit • ' + result.calculation_options['longitudinal_method'].replace('_', ' '))
+
+
+def draw_variability(figure, result):
+    figure.clear()
+    axes = figure.subplots(3, 1, sharex=True)
+    for source, color in [('model', '#2166ac'), ('observed', '#b35806')]:
+        for i, (_, group) in enumerate(result.sections.groupby('segment_id', sort=False)):
+            label = source.capitalize() if i == 0 else None
+            axes[0].plot(group.chainage_m/1000, group[f'{source}_lateral_std_m'], color=color, label=label)
+            axes[1].plot(group.chainage_m/1000, group[f'{source}_cancellation_fraction'], color=color, label=label)
+            axes[2].plot(group.chainage_m/1000, group[f'{source}_deposition_width_fraction'], '-', color=color,
+                         label=f'{source.capitalize()} deposition' if i == 0 else None)
+            axes[2].plot(group.chainage_m/1000, group[f'{source}_erosion_width_fraction'], '--', color=color,
+                         label=f'{source.capitalize()} erosion' if i == 0 else None)
+    axes[0].set(ylabel='Lateral change std (m)', title='Within-section heterogeneity on accepted support')
+    axes[1].set(ylabel='Cancellation fraction', ylim=(-.03, 1.03), title='1 = opposing changes cancel; undefined if no change')
+    axes[2].set(ylabel='Accepted width fraction', xlabel='Downstream chainage (km)', ylim=(-.03, 1.03),
+                title='Erosion/deposition above threshold; remainder within threshold')
+    for axis in axes:
+        axis.legend(fontsize=8)
+        axis.grid(alpha=.2)
+    figure.suptitle('Two-date change variability; sampled transects, not continuous 2-D bed or transport')
+
+
+def draw_sensitivity(figure, exploration):
+    figure.clear()
+    axes = figure.subplots(2, 1, sharex=True)
+    table = exploration.summary[exploration.summary.status == 'ok']
+    x = np.arange(len(table))
+    axes[0].plot(x, table.model_total_m3, 'o-', color='#2166ac', label='Model net')
+    axes[0].plot(x, table.observed_total_m3, 's--', color='#b35806', label='Observed net')
+    axes[0].plot(x, table.observed_gross_turnover_m3, '^:', color='#762a83', label='Observed gross turnover')
+    axes[0].set(ylabel='Bed change (m³)', title='Net totals can hide gross erosion and deposition')
+    changed = table.support_changed.fillna(False).to_numpy(bool)
+    axes[1].scatter(x, table.total_bias_m3, c=np.where(changed, '#d95f02', '#333333'), s=30)
+    has_error = table.observed_volume_sigma_m3.notna().to_numpy()
+    if has_error.any():
+        axes[1].errorbar(x[has_error], table.total_bias_m3.to_numpy()[has_error],
+            yerr=1.96*table.observed_volume_sigma_m3.to_numpy()[has_error], fmt='none', capsize=4,
+            color='#555555', label='Conditional 95% survey error; model exact')
+    axes[1].scatter([], [], color='#d95f02', label='Orange: different footprint')
+    axes[1].set(ylabel='Model − observed bias (m³)', xlabel='Retained calculation assumptions',
+                title='Error bars exclude model / unresolved morphology / registration error')
+    axes[1].set_xticks(x, table.name, rotation=20, ha='right')
+    for axis in axes:
+        axis.axhline(0, color='grey', linewidth=.7)
+        axis.legend(fontsize=8)
+        axis.grid(alpha=.2)
+    unavailable = int((exploration.summary.status != 'ok').sum())
+    figure.suptitle('Assumption sensitivity' + (f' • {unavailable} unavailable scenarios in ledger' if unavailable else ''))

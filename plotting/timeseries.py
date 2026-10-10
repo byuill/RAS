@@ -119,7 +119,11 @@ def draw_stacked_contribution(fig: Figure, class_flux_kg_s: pd.DataFrame, du: Di
     neg = (df < 0).sum().sum()
     if neg:
         info.notes.append(f'{int(neg)} negative signed class-flux values are omitted from the positive contribution stack.')
-    df = df.clip(lower=0).dropna(how="all")
+    incomplete = ~np.isfinite(df.to_numpy()).all(axis=1)
+    if incomplete.any():
+        info.notes.append(f'{int(incomplete.sum())} incomplete class-flux rows remain gaps; partial totals are not normalized.')
+    df = df.clip(lower=0)
+    df.loc[incomplete, :] = np.nan
     df = df.loc[:, (df.sum() > 0)]
     if resample and len(df) > 400:
         df = df.resample(resample).mean()
@@ -130,8 +134,8 @@ def draw_stacked_contribution(fig: Figure, class_flux_kg_s: pd.DataFrame, du: Di
         info.notes.append('No positive class flux is available to stack.')
         return info
     if relative:
-        tot = disp.sum(axis=1).replace(0, np.nan)
-        disp = disp.div(tot, axis=0).fillna(0)
+        tot = disp.sum(axis=1, min_count=len(disp.columns)).replace(0, np.nan)
+        disp = disp.div(tot, axis=0)
     cmap = matplotlib.colormaps["viridis_r"]
     colors = [cmap(i / max(len(disp.columns) - 1, 1)) for i in range(len(disp.columns))]
     ax.stackplot(disp.index, disp.T.values, labels=list(disp.columns), colors=colors, alpha=0.9)

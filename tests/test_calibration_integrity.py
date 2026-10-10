@@ -95,3 +95,51 @@ def test_contribution_plot_handles_all_reverse_flow():
     frame=pd.DataFrame({'Silt':[-1,-2]},index=pd.date_range('2004-01-01',periods=2))
     result=draw_stacked_contribution(Figure(),frame,DisplayUnits(AppSettings()),False,'Test','Test')
     assert any('No positive' in note for note in result.notes)
+
+
+def test_statistics_and_rating_reject_broadcast_pairs_and_invalid_confidence():
+    from analysis.statistics import paired_statistics
+    from analysis.rating_curve import valid_xy, fit_power_law, fit_loglog_poly, fit_rating_curve_legacy, _r_squared
+    for function in (paired_statistics, valid_xy, fit_power_law, fit_loglog_poly):
+        with pytest.raises(ValueError, match='vectors'):
+            function([1, 2, 3], [2])
+    with pytest.raises(ValueError, match='confidence'):
+        fit_power_law([1, 2, 3], [1, 4, 9], confidence=1)
+    assert np.isnan(_r_squared(np.ones(3), np.ones(3)))
+    assert fit_loglog_poly(np.ones(6), np.arange(1, 7)) is None
+    assert fit_rating_curve_legacy(np.ones(6), np.arange(1, 7))['fits'] == {}
+
+
+def test_static_aggregation_cannot_silently_omit_required_grain_classes():
+    group = SedimentGroup('sand', 'Sand', (1, 2), 'Two classes required')
+    assert np.isnan(aggregate(np.array([[3.], [4.]]), [1], group)).all()
+
+
+def test_observed_pairs_and_derived_fraction_flux_honor_driver_exclusions():
+    from analysis.observed import observed_rating_pairs, observed_series
+    d = pd.DataFrame({'discharge_m3s': [1., 2.], 'ssc_mg_l': [10., 20.], 'sand_mg_l': [5., 10.],
+        'qaqc_excluded_fields': ['discharge_m3s', '']}, index=pd.date_range('2004-01-01', periods=2))
+    pairs = observed_rating_pairs(d, 'Q', 'Conc', 'total')
+    assert pairs.index.tolist() == [d.index[1]]
+    flux, _ = observed_series(d, 'Flux', 'sand')
+    assert flux.index.tolist() == [d.index[1]]
+
+
+def test_relative_stack_retains_unknown_time_steps_as_gaps(monkeypatch):
+    from matplotlib.figure import Figure
+    from matplotlib.axes import Axes
+    from plotting.timeseries import draw_stacked_contribution
+    from plotting.styles import DisplayUnits
+    from config.settings import AppSettings
+    captured = []
+    original = Axes.stackplot
+    def capture(axis, x, y, **kwargs):
+        captured.append(np.asarray(y))
+        return original(axis, x, y, **kwargs)
+    monkeypatch.setattr(Axes, 'stackplot', capture)
+    d = pd.DataFrame({'Silt': [1, np.nan, 1], 'Sand': [1, 1, 1]},
+                     index=pd.date_range('2004-01-01', periods=3))
+    info = draw_stacked_contribution(Figure(), d, DisplayUnits(AppSettings()), True, 'Test', 'Test')
+    np.testing.assert_allclose(captured[0][:, [0, 2]], .5)
+    assert np.isnan(captured[0][:, 1]).all()
+    assert any('remain gaps' in note for note in info.notes)
