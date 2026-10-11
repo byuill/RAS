@@ -4,11 +4,14 @@ import json
 from pathlib import Path
 import threading
 
+import pandas as pd
+
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
-from PySide6.QtCore import QTimer, Signal
+from PySide6.QtCore import QTimer, Signal, Qt
 from PySide6.QtWidgets import (QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
-    QLineEdit, QMainWindow, QMessageBox, QPushButton, QTextEdit, QVBoxLayout, QWidget)
+    QLineEdit, QMainWindow, QMessageBox, QPushButton, QTextEdit, QVBoxLayout, QWidget,
+    QCheckBox, QDoubleSpinBox, QGroupBox, QScrollArea, QSplitter)
 
 from gui.workers import WorkerManager
 from tools.hdf_metadata import metadata_report
@@ -17,7 +20,10 @@ from .qaqc_gui import SurveyQaqcWindow
 from .calculation_gui import CalculationAuditWindow
 from .sources import arcpy_request, model_times
 from .workflow import (export_comparison, export_time_series, load_config, match_survey_times,
-                       run_comparison, run_survey_qaqc, run_time_series)
+                       run_comparison, run_survey_qaqc, run_time_series, _validate_alignment)
+from .core import validate_transects
+from .display_units import (customary_frame,
+                            river_miles, uses_river_miles, select_river_mile_range)
 
 
 class DiagnosticPlotsWindow(QMainWindow):
@@ -36,7 +42,7 @@ class DiagnosticPlotsWindow(QMainWindow):
         layout.addWidget(self.quantity)
         layout.addWidget(NavigationToolbar2QT(self.canvas, self))
         layout.addWidget(self.canvas)
-        layout.addWidget(QLabel('Derivatives use downstream chainage within supported segments. Check footprint coverage and survey QA/QC before interpreting them.'))
+        layout.addWidget(QLabel('River mile identifies model XS location. Derivatives use downstream distance within supported segments. Check footprint coverage and survey QA/QC before interpreting them.'))
         self.setCentralWidget(central)
         self.quantity.currentIndexChanged.connect(self.draw)
         self.draw()
@@ -77,24 +83,25 @@ class CalibrationWindow(QMainWindow):
     def __init__(self, config_path='', hdf_path=''):
         super().__init__()
         self.setWindowTitle('HEC-RAS bathymetry and observed bed-change comparison')
-        self.resize(1250, 900)
+        self.resize(1450, 960)
         self.workers = WorkerManager(self)
         self._closing = False
         self._cancel = threading.Event()
+        self._is_busy = False
         self.settings = None
         self.loaded_config_path = self.loaded_hdf_path = None
         self.result = self.provenance = self.series = None
         self.config_path, self.hdf_path, self.gdb_path = QLineEdit(str(config_path)), QLineEdit(str(hdf_path)), QLineEdit()
         self.before_survey, self.after_survey, self.before_time, self.after_time = (QComboBox() for _ in range(4))
-        self.load_button = QPushButton('Load configuration and model dates')
+        self.load_button = QPushButton('Load data and dates')
         self.inspect_button = QPushButton('Inspect HDF metadata')
         self.inventory_button = QPushButton('List geodatabase surveys')
-        self.qaqc_button = QPushButton('Survey QA/QC')
-        self.compare_button = QPushButton('Compare selected surveys')
-        self.series_button = QPushButton('Compare all survey intervals')
+        self.qaqc_button = QPushButton('Review survey QA/QC…')
+        self.compare_button = QPushButton('Calculate selected interval')
+        self.series_button = QPushButton('Calculate all survey intervals')
         self.diagnostic_button = QPushButton('Pattern diagnostics')
         self.profile_button = QPushButton('Cross-section profiles')
-        self.audit_button = QPushButton('Calculation audit / assumptions')
+        self.audit_button = QPushButton('Audit calculations / explore assumptions…')
         self.export_button = QPushButton('Export results and plots')
         self.save_config_button = QPushButton('Save configuration copy')
         self.cancel_button = QPushButton('Cancel operation')
@@ -104,43 +111,126 @@ class CalibrationWindow(QMainWindow):
         self.message = QTextEdit()
         self.message.setReadOnly(True)
         self.message.setMaximumHeight(170)
-        central, layout = QWidget(), QVBoxLayout()
+        self.range_enabled = QCheckBox('Limit to a river-mile range')
+        self.upstream_rm, self.downstream_rm = QDoubleSpinBox(), QDoubleSpinBox()
+        for spin in (self.upstream_rm, self.downstream_rm):
+            spin.setRange(-100000, 100000)
+            spin.setDecimals(3)
+            spin.setSuffix(' RM')
+            spin.setToolTip('Location from model cross-section station labels. Negative river miles are valid.')
+        self.range_note = QLabel('Load a configuration to see the available model stations.')
+        self.range_note.setWordWrap(True)
+        self.range_available = False
+        self.station_metadata = None
+        self.status = QLabel('Start by loading a configuration and model result file.')
+        self.status.setWordWrap(True)
+        self.status.setStyleSheet('padding: 10px; background: #eaf1f7; color: #20384c; border-radius: 5px;')
+        central, layout = QWidget(), QHBoxLayout()
         central.setLayout(layout)
         self.setCentralWidget(central)
+        sidebar, workflow = QWidget(), QVBoxLayout()
+        sidebar.setLayout(workflow)
+        sidebar.setMinimumWidth(375)
+        def group(title):
+            box = QGroupBox(title)
+            contents = QVBoxLayout(box)
+            workflow.addWidget(box)
+            return contents
+        sources = group('1  Load data')
         form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.WrapAllRows)
         self.browse_buttons = []
         for title, field, kind in [('Configuration JSON', self.config_path, 'config'),
-                                    ('RAS plan result HDF', self.hdf_path, 'hdf'),
-                                    ('Geodatabase override (optional)', self.gdb_path, 'gdb')]:
+                                  ('RAS plan result HDF', self.hdf_path, 'hdf'),
+                                  ('Geodatabase override (optional)', self.gdb_path, 'gdb')]:
             line = QHBoxLayout()
             line.addWidget(field)
-            button = QPushButton('Browse')
+            button = QPushButton('Browse…')
             button.clicked.connect(lambda checked=False, f=field, k=kind: self._browse(f, k))
             self.browse_buttons.append(button)
             line.addWidget(button)
+            field.setToolTip('Full source path; configuration mappings and source units remain as configured.')
             form.addRow(title, line)
-        for label, control in [('Baseline survey', self.before_survey), ('Target survey', self.after_survey),
-                               ('Baseline model output', self.before_time), ('Target model output', self.after_time)]:
+        sources.addLayout(form)
+        sources.addWidget(self.load_button)
+        details = QHBoxLayout()
+        details.addWidget(self.inspect_button)
+        details.addWidget(self.inventory_button)
+        sources.addLayout(details)
+        interval = group('2  Select dates and reach')
+        form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.WrapAllRows)
+        for label, control in [('Baseline survey → baseline model date', self.before_survey),
+                               ('Baseline model output', self.before_time),
+                               ('Target survey → target model date', self.after_survey),
+                               ('Target model output', self.after_time)]:
             form.addRow(label, control)
-        layout.addLayout(form)
-        for choices in [[(self.load_button, self.load), (self.inspect_button, self.inspect),
-                         (self.inventory_button, self.inventory), (self.qaqc_button, self.review_surveys)],
-                        [(self.compare_button, self.compare), (self.series_button, self.compare_series),
-                         (self.save_config_button, self.save_config), (self.cancel_button, self.cancel)],
-                        [(self.diagnostic_button, self.show_diagnostics), (self.profile_button, self.show_profiles),
-                         (self.audit_button, self.show_calculation_audit), (self.export_button, self.export)]]:
-            actions = QHBoxLayout()
-            for button, callback in choices:
-                button.clicked.connect(callback)
-                actions.addWidget(button)
-            layout.addLayout(actions)
-        layout.addWidget(QLabel('Positive = deposition; negative = erosion. Compare magnitude and spatial pattern on the same sampled bed footprint.'))
-        layout.addWidget(NavigationToolbar2QT(self.canvas, self))
-        layout.addWidget(self.canvas)
-        layout.addWidget(self.message)
+        interval.addLayout(form)
+        interval.addWidget(self.range_enabled)
+        form = QFormLayout()
+        form.addRow('Upstream river mile', self.upstream_rm)
+        form.addRow('Downstream river mile', self.downstream_rm)
+        interval.addLayout(form)
+        interval.addWidget(self.range_note)
+        calculate = group('3  Review and calculate')
+        calculate.addWidget(self.qaqc_button)
+        hint = QLabel('Review flags and datum evidence before comparing. Baseline precedes target; model dates must match the survey dates within the configured tolerance.')
+        hint.setWordWrap(True)
+        calculate.addWidget(hint)
+        calculate.addWidget(self.compare_button)
+        calculate.addWidget(self.series_button)
+        calculate.addWidget(self.save_config_button)
+        workflow.addStretch()
+        workflow.addWidget(self.cancel_button)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(sidebar)
+        scroll.setMinimumWidth(405)
+        right, results = QWidget(), QVBoxLayout()
+        right.setLayout(results)
+        results.addWidget(self.status)
+        review = QGroupBox('4  Inspect results and export')
+        actions = QVBoxLayout(review)
+        top = QHBoxLayout()
+        top.addWidget(self.profile_button)
+        top.addWidget(self.diagnostic_button)
+        actions.addLayout(top)
+        bottom = QHBoxLayout()
+        bottom.addWidget(self.audit_button, 2)
+        bottom.addWidget(self.export_button, 1)
+        actions.addLayout(bottom)
+        results.addWidget(review)
+        results.addWidget(QLabel('ft • ft² • yd³ • model river miles     |     Positive = deposition; negative = erosion'))
+        results.addWidget(NavigationToolbar2QT(self.canvas, self))
+        results.addWidget(self.canvas, 1)
+        results.addWidget(self.message)
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(scroll)
+        splitter.addWidget(right)
+        splitter.setSizes([420, 1010])
+        splitter.setChildrenCollapsible(False)
+        layout.addWidget(splitter)
+        for button in (self.load_button, self.compare_button, self.export_button):
+            button.setMinimumHeight(36)
+            button.setStyleSheet('QPushButton { font-weight: bold; padding: 6px; }')
+        self.compare_button.setStyleSheet('QPushButton { background: #2166ac; color: white; font-weight: bold; padding: 8px; } QPushButton:disabled { background: #d9e0e6; color: #6b747c; }')
+        for button, callback in [(self.load_button, self.load), (self.inspect_button, self.inspect),
+            (self.inventory_button, self.inventory), (self.qaqc_button, self.review_surveys),
+            (self.compare_button, self.compare), (self.series_button, self.compare_series),
+            (self.save_config_button, self.save_config), (self.cancel_button, self.cancel),
+            (self.diagnostic_button, self.show_diagnostics), (self.profile_button, self.show_profiles),
+            (self.audit_button, self.show_calculation_audit), (self.export_button, self.export)]:
+            button.clicked.connect(callback)
+        for widget in (self.range_enabled, self.upstream_rm, self.downstream_rm):
+            if isinstance(widget, QCheckBox):
+                widget.toggled.connect(self._invalidate_result)
+            else:
+                widget.valueChanged.connect(self._invalidate_result)
         for field in (self.config_path, self.hdf_path, self.gdb_path):
             field.textChanged.connect(self._invalidate_result)
-        for combo in (self.before_survey, self.after_survey, self.before_time, self.after_time):
+        for combo in (self.before_survey, self.after_survey):
+            combo.currentIndexChanged.connect(self._survey_changed)
+        for combo in (self.before_time, self.after_time):
             combo.currentIndexChanged.connect(self._invalidate_result)
         self._busy(False)
         if config_path:
@@ -156,18 +246,87 @@ class CalibrationWindow(QMainWindow):
             field.setText(value)
 
     def _busy(self, busy):
-        for widget in [self.load_button, self.inspect_button, self.inventory_button, self.compare_button,
-                       self.qaqc_button, self.series_button, self.save_config_button, self.config_path,
-                       self.hdf_path, self.gdb_path, self.before_survey, self.after_survey,
-                       self.before_time, self.after_time, *self.browse_buttons]:
+        self._is_busy = busy
+        configured = bool(self.settings and self.config_path.text() == getattr(self, 'settings_path', None))
+        model_ready = (configured and self.loaded_config_path == self.config_path.text() and
+                       self.loaded_hdf_path == self.hdf_path.text() and self.before_time.count() > 0)
+        reason = 'Load data and dates to start.'
+        valid_pair = False
+        range_valid, range_error = True, ''
+        if configured and self.range_available:
+            rm = river_miles(self.station_metadata)
+            selected = rm
+            if self.range_enabled.isChecked():
+                selected = rm[(rm <= self.upstream_rm.value()+1e-8) & (rm >= self.downstream_rm.value()-1e-8)]
+                if self.upstream_rm.value() <= self.downstream_rm.value() or len(selected) < 2:
+                    range_valid = False
+                    range_error = 'Select at least two cross sections, with upstream RM greater than downstream RM.'
+            selection = f'Selected: RM {selected[0]:g} → {selected[-1]:g} ({len(selected)} XS).' if range_valid else range_error
+            self.range_note.setText(f'Manifest: RM {rm[0]:g} → {rm[-1]:g}.\n'+selection+' Bounds include existing XS only.')
+        if model_ready:
+            try:
+                _validate_alignment(self.settings,
+                    [self.before_survey.currentData(), self.after_survey.currentData()], self.times,
+                    [self.before_time.currentData(), self.after_time.currentData()])
+                if self.range_enabled.isChecked() and self.upstream_rm.value() <= self.downstream_rm.value():
+                    raise ValueError('Upstream river mile must exceed downstream river mile.')
+                valid_pair = True
+                reason = 'Ready: review survey QA/QC, then calculate the selected interval.'
+            except (ValueError, KeyError, TypeError) as error:
+                reason = str(error)
+        elif configured:
+            reason = 'Surveys ready for QA/QC. Load an HDF with model dates to calculate bed change.'
+        if not range_valid:
+            reason = range_error
+        for widget in (self.config_path, self.hdf_path, self.gdb_path, *self.browse_buttons):
             widget.setEnabled(not busy)
+        self.load_button.setEnabled(not busy and bool(self.config_path.text().strip()))
+        self.inspect_button.setEnabled(not busy and bool(self.hdf_path.text().strip()))
+        self.inventory_button.setEnabled(not busy and configured and any(
+            source['kind'].startswith('gdb_') for source in self.settings['surveys'].values()))
+        for widget in (self.before_survey, self.after_survey, self.save_config_button):
+            widget.setEnabled(not busy and configured)
+        self.qaqc_button.setEnabled(not busy and configured and range_valid)
+        for widget in (self.before_time, self.after_time):
+            widget.setEnabled(not busy and model_ready)
+        self.range_enabled.setEnabled(not busy and configured and self.range_available)
+        for widget in (self.upstream_rm, self.downstream_rm):
+            widget.setEnabled(not busy and configured and self.range_available and self.range_enabled.isChecked())
+        self.compare_button.setEnabled(not busy and valid_pair and range_valid)
+        self.compare_button.setToolTip(reason)
+        series_ready = False
+        if model_ready:
+            try:
+                names = sorted(self.settings['surveys'], key=lambda name: pd.Timestamp(self.settings['surveys'][name]['date']))
+                match_survey_times(self.settings, self.times, names)
+                series_ready = len(names) > 1
+            except (ValueError, KeyError, TypeError):
+                pass
+        self.series_button.setEnabled(not busy and series_ready and range_valid)
         self.export_button.setEnabled(not busy and (self.result is not None or self.series is not None))
-        self.diagnostic_button.setEnabled(not busy and self.result is not None)
-        self.profile_button.setEnabled(not busy and self.result is not None)
-        self.audit_button.setEnabled(not busy and self.result is not None)
+        for widget in (self.diagnostic_button, self.profile_button, self.audit_button):
+            widget.setEnabled(not busy and self.result is not None)
         self.cancel_button.setEnabled(busy)
+        if busy:
+            reason = 'Working… You can cancel the current operation.'
+        elif self.result is not None or self.series is not None:
+            reason = 'Results ready. Inspect profiles, spatial patterns and calculation assumptions; then export.'
+        self.status.setText(reason)
+
+    def _survey_changed(self, *_):
+        if self.loaded_hdf_path == self.hdf_path.text() and hasattr(self, 'times') and self.settings:
+            for survey, output in ((self.before_survey, self.before_time), (self.after_survey, self.after_time)):
+                source = self.settings['surveys'].get(survey.currentData(), {})
+                try:
+                    date = pd.Timestamp(source['date'])
+                    if not pd.isna(date) and date.tz is None:
+                        output.setCurrentIndex(int(abs(self.times-date).argmin()))
+                except (ValueError, KeyError, TypeError):
+                    pass
+        self._invalidate_result()
 
     def _invalidate_result(self, *_):
+        had_results = self.result is not None or self.series is not None
         self.result = self.provenance = self.series = None
         self.export_button.setEnabled(False)
         self.diagnostic_button.setEnabled(False)
@@ -179,11 +338,15 @@ class CalibrationWindow(QMainWindow):
                 window.close()
         self.figure.clear()
         self.canvas.draw_idle()
+        if had_results:
+            self.message.setPlainText('Inputs changed. Calculate again to refresh results and plots.')
+        self._busy(self._is_busy)
 
     def _error(self, error):
         self._busy(False)
         if self._closing:
             return
+        self.status.setText('Operation stopped. Review the details below and the inputs before retrying.')
         self.message.setPlainText(str(error))
         self.failed.emit(str(error))
 
@@ -191,6 +354,7 @@ class CalibrationWindow(QMainWindow):
         self._cancel = threading.Event()
         cancel = self._cancel
         self._busy(True)
+        self.status.setText(f'{name.capitalize()} in progress… Cancel is available below the workflow.')
         def work():
             payload = operation(cancel)
             if cancel.is_set():
@@ -209,9 +373,30 @@ class CalibrationWindow(QMainWindow):
         self._invalidate_result()
         self.loaded_config_path = self.loaded_hdf_path = None
         self.settings = None
+        self.before_time.clear()
+        self.after_time.clear()
+        if getattr(self, 'qaqc_window', None):
+            self.qaqc_window.close()
         try:
             self.settings = load_config(self.config_path.text())
             self.settings_path = self.config_path.text()
+            transects, sections = validate_transects(pd.read_csv(self.settings['transects'], dtype={'xs_id': str}))
+            self.station_metadata = sections
+            self.range_available = bool(uses_river_miles(sections) and (pd.Series(river_miles(sections)).diff().dropna() < 0).all())
+            bounds = self.settings.get('river_mile_range')
+            select_river_mile_range(transects, bounds)
+            self.range_enabled.setChecked(bool(bounds))
+            if self.range_available:
+                rm = river_miles(sections)
+                for spin in (self.upstream_rm, self.downstream_rm):
+                    spin.setRange(float(rm[-1]), float(rm[0]))
+                self.upstream_rm.setValue(bounds['upstream'] if bounds else rm[0])
+                self.downstream_rm.setValue(bounds['downstream'] if bounds else rm[-1])
+                self.range_note.setText(f'Manifest: RM {rm[0]:g} → {rm[-1]:g}. Bounds include existing XS only; exact selected stations appear in results.')
+            else:
+                if bounds:
+                    raise ValueError('This configuration requests river-mile selection but stationing is unavailable or not downstream-decreasing.')
+                self.range_note.setText('Text XS IDs: supply a river_mile manifest column to locate sections by river mile. Distance fallback displays in miles.')
             if not self.hdf_path.text():
                 self.hdf_path.setText(self.settings.get('model', {}).get('path', ''))
             for combo in (self.before_survey, self.after_survey):
@@ -221,11 +406,13 @@ class CalibrationWindow(QMainWindow):
             self.after_survey.setCurrentIndex(max(0, self.after_survey.count()-1))
             # An empty override preserves distinct source geodatabases from config.
             if not self.hdf_path.text():
+                self._busy(False)
                 self.message.setPlainText('Surveys loaded. Survey QA/QC is available; select an HDF and reload for model comparison.')
                 return
             mapping, path = copy.deepcopy(self.settings['model']), self.hdf_path.text()
             self._submit('load', lambda cancel: model_times(path, mapping), self._loaded)
         except Exception as error:
+            self.settings = None
             self._error(error)
 
     def _loaded(self, times):
@@ -250,6 +437,14 @@ class CalibrationWindow(QMainWindow):
         if not self.settings or self.config_path.text() != self.settings_path:
             raise ValueError('Load a configuration first.')
         settings = copy.deepcopy(self.settings)
+        if self.range_enabled.isChecked():
+            rm = river_miles(self.station_metadata)
+            selected = rm[(rm <= self.upstream_rm.value()+1e-8) & (rm >= self.downstream_rm.value()-1e-8)]
+            if self.upstream_rm.value() <= self.downstream_rm.value() or len(selected) < 2:
+                raise ValueError('Select at least two cross sections, with upstream RM greater than downstream RM.')
+            settings['river_mile_range'] = {'upstream': self.upstream_rm.value(), 'downstream': self.downstream_rm.value()}
+        else:
+            settings.pop('river_mile_range', None)
         if self.gdb_path.text():
             for source in settings['surveys'].values():
                 if source['kind'].startswith('gdb_'):
@@ -297,8 +492,21 @@ class CalibrationWindow(QMainWindow):
 
     def _review_ready(self, payload):
         self._busy(False)
-        self.qaqc_window = SurveyQaqcWindow(*payload, self._apply_qaqc, self)
+        if getattr(self, 'qaqc_window', None):
+            self.qaqc_window.close()
+        review_settings = payload[1]['settings']
+        self.qaqc_window = SurveyQaqcWindow(*payload, lambda options: self._apply_review(options, review_settings), self)
         self.qaqc_window.show()
+
+    def _apply_review(self, options, review_settings):
+        current = self._settings_snapshot()
+        review_settings = copy.deepcopy(review_settings)
+        for settings in (current, review_settings):
+            for source in settings['surveys'].values():
+                source.pop('qaqc', None)
+        if current != review_settings:
+            raise ValueError('Data sources or selected reach changed. Reopen survey QA/QC before applying decisions.')
+        self._apply_qaqc(options)
 
     def _apply_qaqc(self, options):
         if not self.workers.idle():
@@ -324,12 +532,12 @@ class CalibrationWindow(QMainWindow):
         self._busy(False)
         draw_comparison(self.figure, self.result, self.provenance)
         self.canvas.draw_idle()
-        m = self.result.metrics
+        m = customary_frame(pd.DataFrame([self.result.metrics])).iloc[0]
         correlation = m['change_shape_correlation']
         shape = 'undefined (constant change)' if correlation is None else f'{correlation:.3f}'
-        self.message.setPlainText(f'Model / observed volume: {m["model_total_m3"]:,.1f} / {m["observed_total_m3"]:,.1f} m³; '
-                                 f'bias {m["total_bias_m3"]:,.1f} m³\n'
-                                 f'Mean change RMSE: {m["mean_change_rmse_m"]:.3f} m; shape correlation: {shape}; '
+        self.message.setPlainText(f'Model / observed volume: {m["model_total_yd3"]:,.1f} / {m["observed_total_yd3"]:,.1f} yd³; '
+                                 f'bias {m["total_bias_yd3"]:,.1f} yd³\n'
+                                 f'Mean change RMSE: {m["mean_change_rmse_ft"]:.3f} ft; shape correlation: {shape}; '
                                  f'zone agreement: {m["zone_agreement_fraction"]:.1%}\n'
                                  f'XS used / excluded: {m["sections_used"]} / {m["sections_excluded"]}; '
                                  f'minimum transect footprint coverage: {m["minimum_footprint_coverage"]:.1%}\n'+
@@ -350,8 +558,8 @@ class CalibrationWindow(QMainWindow):
         self._busy(False)
         draw_time_series(self.figure, series)
         self.canvas.draw_idle()
-        self.message.setPlainText(series.summary[['survey_before', 'survey_after', 'mean_change_rmse_m',
-                                                  'zone_agreement_fraction', 'change_shape_correlation']].to_string(index=False)+
+        self.message.setPlainText(customary_frame(series.summary[['survey_before', 'survey_after', 'mean_change_rmse_m',
+                                                  'zone_agreement_fraction', 'change_shape_correlation']]).to_string(index=False)+
                                   '\nAll intervals use the same accepted sections and lateral support. Export includes each interval’s diagnostics and QA/QC.')
 
     def show_diagnostics(self):

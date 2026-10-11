@@ -1,30 +1,55 @@
 """Shared GUI/headless figures, using physical chainage and supported segments."""
+import copy
 import numpy as np
+
+from .display_units import (customary_column, longitudinal_x, longitudinal_axis,
+                            uses_river_miles, FT_PER_M, M_PER_MILE)
+
+
+def _plot_frame(frame):
+    out = frame.copy()
+    for column in out:
+        # Keep canonical chainage for the explicit fallback distance axis.
+        if not column.endswith('chainage_m'):
+            _, scale = customary_column(column)
+            if scale != 1:
+                out[column] = out[column]*scale
+    return out
+
+
+def _plot_result(result):
+    out = copy.copy(result)
+    out.sections, out.profiles, out.intervals = (_plot_frame(getattr(result, name))
+                                               for name in ('sections', 'profiles', 'intervals'))
+    out.metrics = {key: value*customary_column(key)[1] if value is not None and isinstance(value, (int, float))
+                   else value for key, value in result.metrics.items()}
+    return out
 
 
 def segment_lines(axis, table, columns):
     colors = ('#2166ac', '#b35806', '#555555', '#762a83')
     for color, (column, label, style) in zip(colors, columns):
         for i, (_, group) in enumerate(table.groupby('segment_id', sort=False)):
-            axis.plot(group.chainage_m/1000, group[column], style, color=color,
+            axis.plot(longitudinal_x(group), group[column], style, color=color,
                       label=label if i == 0 else None)
-    axis.set_xlabel('Downstream chainage (km)')
+    longitudinal_axis(axis, table)
 
 
 def draw_comparison(figure, result, provenance):
+    result = _plot_result(result)
     figure.clear()
     upper, lower = figure.subplots(2, 1)
     columns = [('model_cumulative_m3', 'Model', '-'), ('observed_cumulative_m3', 'Observed', '--')]
     if 'native_cumulative_m3' in result.sections:
         columns.append(('native_cumulative_m3', 'Native RAS audit', ':'))
     segment_lines(upper, result.sections, columns)
-    upper.set_ylabel('Node cumulative bed change per segment (m³)')
+    upper.set_ylabel('Cumulative bed volume change (yd³)\nNode sum per supported segment')
     upper.set_title(f'{provenance["survey_before"]} → {provenance["survey_after"]}')
     upper.text(.01, .02, 'Node sum includes the first half-reach contribution; resets at gaps.',
-               transform=upper.transAxes, fontsize=8)
+               transform=upper.transAxes, fontsize=8, bbox=dict(facecolor='white', alpha=.8, edgecolor='none'))
     segment_lines(lower, result.sections, [('model_mean_change_m', 'Model', '-'),
                                           ('observed_mean_change_m', 'Observed', '--')])
-    lower.set_ylabel('Mean bed elevation change (m)')
+    lower.set_ylabel('Mean bed elevation change (ft)')
     threshold = result.metrics['change_detection_threshold_m']
     lower.axhspan(-threshold, threshold, color='grey', alpha=.15, label='Detection threshold')
     for axis in (upper, lower):
@@ -34,22 +59,23 @@ def draw_comparison(figure, result, provenance):
 
 
 def draw_diagnostics(figure, result, quantity='change'):
+    result = _plot_result(result)
     figure.clear()
     axes = figure.subplots(3, 2)
     table, metrics = result.sections, result.metrics
     segment_lines(axes[0, 0], table, [('model_mean_change_m', 'Model', '-'),
                                     ('observed_mean_change_m', 'Observed', '--')])
-    axes[0, 0].set_ylabel('Bed change (m)')
+    axes[0, 0].set_ylabel('Bed change (ft)')
     for label, color in [('erosion', 'royalblue'), ('deposition', 'sienna'), ('within_threshold', 'grey')]:
         group = table[table.observed_zone == label]
-        axes[0, 0].scatter(group.chainage_m/1000, group.observed_mean_change_m, c=color, label=f'Observed {label}')
+        axes[0, 0].scatter(longitudinal_x(group), group.observed_mean_change_m, c=color, label=f'Observed {label}')
     axes[0, 1].scatter(table.observed_mean_change_m, table.model_mean_change_m,
                        c=np.where(table.zone_agrees, 'seagreen', 'firebrick'), s=25)
     limits = np.r_[table.observed_mean_change_m, table.model_mean_change_m]
     lo, hi = float(limits.min()), float(limits.max())
     padding = max((hi-lo)*.05, .05)
     axes[0, 1].plot([lo-padding, hi+padding], [lo-padding, hi+padding], ':', color='grey')
-    axes[0, 1].set(xlabel='Observed change (m)', ylabel='Model change (m)',
+    axes[0, 1].set(xlabel='Observed change (ft)', ylabel='Model change (ft)',
                    title='Green: same zone; red: different zone')
     lengths = table.control_length_m.to_numpy()*table.effective_width_m.to_numpy()
     standardized = table.copy()
@@ -67,9 +93,9 @@ def draw_diagnostics(figure, result, quantity='change'):
                                     ('model_target_elev_m', 'Model target', '-'),
                                     ('observed_baseline_elev_m', 'Observed baseline', '-.'),
                                     ('observed_target_elev_m', 'Observed target', '--')])
-    axes[1, 1].set_ylabel('Mean bed elevation (m, common datum)')
-    for axis, derivative, units, label in [(axes[2, 0], 'slope', 'm_per_km', 'Slope (m/km)'),
-                                           (axes[2, 1], 'concavity', 'm_per_km2', 'Concavity (m/km²)')]:
+    axes[1, 1].set_ylabel('Mean bed elevation (ft, common datum)')
+    for axis, derivative, units, label in [(axes[2, 0], 'slope', 'm_per_km', 'Slope (ft / downstream mi)'),
+                                           (axes[2, 1], 'concavity', 'm_per_km2', 'Concavity (ft / downstream mi²)')]:
         segment_lines(axis, table, [(f'model_{quantity}_{derivative}_{units}', 'Model', '-'),
                                    (f'observed_{quantity}_{derivative}_{units}', 'Observed', '--')])
         axis.set_ylabel(label)
@@ -82,6 +108,7 @@ def draw_diagnostics(figure, result, quantity='change'):
 
 
 def draw_section(figure, result, xs_id):
+    result = _plot_result(result)
     figure.clear()
     upper, lower = figure.subplots(2, 1, sharex=True)
     data = result.profiles[result.profiles.xs_id == xs_id].copy()
@@ -102,8 +129,8 @@ def draw_section(figure, result, xs_id):
     for column, label in [('model_change_m', 'Model'), ('observed_change_m', 'Observed')]:
         lower.scatter(data.u_m[data.accepted_point], data.loc[data.accepted_point, column], s=10, label=label)
         supported_line(lower, column, '-')
-    upper.set(title=f'XS {xs_id}: matched lateral support', ylabel='Bed elevation (m)')
-    lower.set(xlabel='Lateral station (m)', ylabel='Bed change (m)')
+    upper.set(title=f'XS {xs_id}: matched lateral support', ylabel='Bed elevation (ft)')
+    lower.set(xlabel='Lateral station (ft)', ylabel='Bed change (ft)')
     lower.axhline(0, color='grey', linewidth=.7)
     for axis in (upper, lower):
         axis.legend(fontsize=8)
@@ -113,18 +140,20 @@ def draw_section(figure, result, xs_id):
 def draw_time_series(figure, series):
     figure.clear()
     axes = figure.subplots(2, 1)
-    xs = series.comparisons[0][0].sections.xs_id.tolist()
+    sections = series.comparisons[0][0].sections
+    xs = sections.xs_id.tolist()
+    locations = longitudinal_x(sections)
     values = [np.array([r.sections[f'{source}_mean_change_m_per_year'].to_numpy()
-                        for r, _ in series.comparisons]) for source in ('model', 'observed')]
+                        for r, _ in series.comparisons])*FT_PER_M for source in ('model', 'observed')]
     limit = max(max(abs(v).max() for v in values), 1e-8)
     ticks = np.unique(np.linspace(0, len(xs)-1, min(12, len(xs))).astype(int))
     for axis, data, source in zip(axes, values, ('Model', 'Observed')):
         artist = axis.imshow(data, aspect='auto', cmap='RdBu_r', vmin=-limit, vmax=limit, interpolation='nearest')
-        axis.set_xticks(ticks, [xs[i] for i in ticks])
+        axis.set_xticks(ticks, [f'{locations[i]:g}' for i in ticks])
         labels = [f'{p["survey_before"]} → {p["survey_after"]}' for _, p in series.comparisons]
         axis.set_yticks(np.arange(len(labels)), labels)
-        axis.set(xlabel='Cross-section IDs in downstream order (discrete samples)', title=source)
-        figure.colorbar(artist, ax=axis, label='Bed change rate (m/year); red deposition')
+        axis.set(xlabel='River mile (discrete model XS samples; downstream →)' if uses_river_miles(sections) else 'Downstream distance (mi; discrete XS samples)', title=source)
+        figure.colorbar(artist, ax=axis, label='Bed change rate (ft/year); red deposition')
         boundaries = series.comparisons[0][0].sections.segment_id.diff().fillna(0).ne(0)
         for index in np.flatnonzero(boundaries):
             axis.axvline(index-.5, color='black', linewidth=2)
@@ -133,6 +162,7 @@ def draw_time_series(figure, series):
 
 def draw_calculation_audit(figure, result, xs_id, reference=None, cumulative='node'):
     """Calculation stages, with consistent source colors and explicit prefix semantics."""
+    result = _plot_result(result)
     figure.clear()
     axes = figure.subplots(2, 2)
     table = result.sections
@@ -140,19 +170,22 @@ def draw_calculation_audit(figure, result, xs_id, reference=None, cumulative='no
     columns = [(f'model_{suffix}', 'Model', '-'), (f'observed_{suffix}', 'Observed', '--')]
     segment_lines(axes[0, 0], table, columns)
     if reference is not None:
+        reference = _plot_result(reference)
         for source, color in [('model', '#2166ac'), ('observed', '#b35806')]:
             for i, (_, group) in enumerate(reference.sections.groupby('segment_id', sort=False)):
-                axes[0, 0].plot(group.chainage_m/1000, group[f'{source}_{suffix}'], ':',
+                axes[0, 0].plot(longitudinal_x(group), group[f'{source}_{suffix}'], ':',
                     color=color, alpha=.45, label=f'{source.capitalize()} reference' if i == 0 else None)
-    axes[0, 0].set(ylabel='Signed cumulative change (m³)',
+        longitudinal_axis(axes[0, 0], reference.sections)
+    axes[0, 0].set(ylabel='Signed cumulative change (yd³)',
         title='Node control-volume sum' if cumulative == 'node' else 'Completed-reach prefix (starts at zero)')
     interval = result.intervals
-    x = interval.mid_chainage_m.to_numpy()/1000
+    x = interval.mid_river_mile.to_numpy() if uses_river_miles(table) else interval.mid_chainage_m.to_numpy()/M_PER_MILE
+    longitudinal_axis(axes[0, 1], table, midpoint=True)
     # Thin paired markers retain readability when reach lengths are very unequal.
     for source, marker, color in [('model', 'o', '#2166ac'), ('observed', 's', '#b35806')]:
         axes[0, 1].vlines(x, 0, interval[f'{source}_volume_change_m3'], color=color, alpha=.35)
         axes[0, 1].scatter(x, interval[f'{source}_volume_change_m3'], marker=marker, color=color, s=20, label=source.capitalize())
-    axes[0, 1].set(xlabel='Reach midpoint chainage (km)', ylabel='Reach volume change (m³)',
+    axes[0, 1].set(ylabel='Reach volume change (yd³)',
                    title='Endpoint areas × verified reach length')
     data = result.profiles[result.profiles.xs_id == xs_id]
     accepted = np.flatnonzero(data.accepted_interval_to_next.to_numpy())
@@ -165,15 +198,16 @@ def draw_calculation_audit(figure, result, xs_id, reference=None, cumulative='no
         axes[1, 0].fill_between(u, 0, z, color=color, alpha=.16)
     threshold = result.metrics['change_detection_threshold_m']
     axes[1, 0].axhspan(-threshold, threshold, color='grey', alpha=.12, label='Classification threshold')
-    axes[1, 0].set(xlabel='Lateral station (m)', ylabel='Target − baseline (m)',
-                   title=f'XS {xs_id}: shaded integral gives ΔA (m²)')
+    axes[1, 0].set(xlabel='Lateral station (ft)', ylabel='Target − baseline (ft)',
+                   title=f'XS {xs_id}: shaded integral gives ΔA (ft²)')
     for source, color in [('model', '#2166ac'), ('observed', '#b35806')]:
         for i, (_, group) in enumerate(table.groupby('segment_id', sort=False)):
-            axes[1, 1].plot(group.chainage_m/1000, group[f'{source}_deposition_cumulative_m3'], '-', color=color,
+            axes[1, 1].plot(longitudinal_x(group), group[f'{source}_deposition_cumulative_m3'], '-', color=color,
                             label=f'{source.capitalize()} deposition' if i == 0 else None)
-            axes[1, 1].plot(group.chainage_m/1000, -group[f'{source}_erosion_cumulative_m3'], '--', color=color,
+            axes[1, 1].plot(longitudinal_x(group), -group[f'{source}_erosion_cumulative_m3'], '--', color=color,
                             label=f'{source.capitalize()} erosion (negative)' if i == 0 else None)
-    axes[1, 1].set(xlabel='Downstream chainage (km)', ylabel='Node cumulative components (m³)',
+    longitudinal_axis(axes[1, 1], table)
+    axes[1, 1].set(ylabel='Node cumulative components (yd³)',
                    title='Opposing changes hidden by net averages')
     for axis in axes.flat:
         axis.axhline(0, color='grey', linewidth=.7)
@@ -183,20 +217,22 @@ def draw_calculation_audit(figure, result, xs_id, reference=None, cumulative='no
 
 
 def draw_variability(figure, result):
+    result = _plot_result(result)
     figure.clear()
     axes = figure.subplots(3, 1, sharex=True)
     for source, color in [('model', '#2166ac'), ('observed', '#b35806')]:
         for i, (_, group) in enumerate(result.sections.groupby('segment_id', sort=False)):
             label = source.capitalize() if i == 0 else None
-            axes[0].plot(group.chainage_m/1000, group[f'{source}_lateral_std_m'], color=color, label=label)
-            axes[1].plot(group.chainage_m/1000, group[f'{source}_cancellation_fraction'], color=color, label=label)
-            axes[2].plot(group.chainage_m/1000, group[f'{source}_deposition_width_fraction'], '-', color=color,
+            axes[0].plot(longitudinal_x(group), group[f'{source}_lateral_std_m'], color=color, label=label)
+            axes[1].plot(longitudinal_x(group), group[f'{source}_cancellation_fraction'], color=color, label=label)
+            axes[2].plot(longitudinal_x(group), group[f'{source}_deposition_width_fraction'], '-', color=color,
                          label=f'{source.capitalize()} deposition' if i == 0 else None)
-            axes[2].plot(group.chainage_m/1000, group[f'{source}_erosion_width_fraction'], '--', color=color,
+            axes[2].plot(longitudinal_x(group), group[f'{source}_erosion_width_fraction'], '--', color=color,
                          label=f'{source.capitalize()} erosion' if i == 0 else None)
-    axes[0].set(ylabel='Lateral change std (m)', title='Within-section heterogeneity on accepted support')
+    axes[0].set(ylabel='Lateral change std (ft)', title='Within-section heterogeneity on accepted support')
     axes[1].set(ylabel='Cancellation fraction', ylim=(-.03, 1.03), title='1 = opposing changes cancel; undefined if no change')
-    axes[2].set(ylabel='Accepted width fraction', xlabel='Downstream chainage (km)', ylim=(-.03, 1.03),
+    longitudinal_axis(axes[2], result.sections)
+    axes[2].set(ylabel='Accepted width fraction', ylim=(-.03, 1.03),
                 title='Erosion/deposition above threshold; remainder within threshold')
     for axis in axes:
         axis.legend(fontsize=8)
@@ -207,12 +243,12 @@ def draw_variability(figure, result):
 def draw_sensitivity(figure, exploration):
     figure.clear()
     axes = figure.subplots(2, 1, sharex=True)
-    table = exploration.summary[exploration.summary.status == 'ok']
+    table = _plot_frame(exploration.summary[exploration.summary.status == 'ok'])
     x = np.arange(len(table))
     axes[0].plot(x, table.model_total_m3, 'o-', color='#2166ac', label='Model net')
     axes[0].plot(x, table.observed_total_m3, 's--', color='#b35806', label='Observed net')
     axes[0].plot(x, table.observed_gross_turnover_m3, '^:', color='#762a83', label='Observed gross turnover')
-    axes[0].set(ylabel='Bed change (m³)', title='Net totals can hide gross erosion and deposition')
+    axes[0].set(ylabel='Bed change (yd³)', title='Net totals can hide gross erosion and deposition')
     changed = table.support_changed.fillna(False).to_numpy(bool)
     axes[1].scatter(x, table.total_bias_m3, c=np.where(changed, '#d95f02', '#333333'), s=30)
     has_error = table.observed_volume_sigma_m3.notna().to_numpy()
@@ -221,7 +257,7 @@ def draw_sensitivity(figure, exploration):
             yerr=1.96*table.observed_volume_sigma_m3.to_numpy()[has_error], fmt='none', capsize=4,
             color='#555555', label='Conditional 95% survey error; model exact')
     axes[1].scatter([], [], color='#d95f02', label='Orange: different footprint')
-    axes[1].set(ylabel='Model − observed bias (m³)', xlabel='Retained calculation assumptions',
+    axes[1].set(ylabel='Model − observed bias (yd³)', xlabel='Retained calculation assumptions',
                 title='Error bars exclude model / unresolved morphology / registration error')
     axes[1].set_xticks(x, table.name, rotation=20, ha='right')
     for axis in axes:

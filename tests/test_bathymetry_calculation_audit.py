@@ -197,7 +197,8 @@ def test_gui_scenario_knobs_recompute_and_reset_without_changing_main_result(tmp
     window.controls['observed_target_shift_m'].setValue(.2)
     window.calculate()
     wait(qapp, window.workers.idle)
-    assert window.result.metrics['observed_total_m3'] == pytest.approx(2400)
+    # 0.2 ft added across 2,000 m² changes canonical volume by 121.92 m³.
+    assert window.result.metrics['observed_total_m3'] == pytest.approx(2121.92)
     assert r.metrics['observed_total_m3'] == 2000
     assert window.summary_table.rowCount() == 2
     window.cumulative.setCurrentIndex(1)
@@ -205,7 +206,7 @@ def test_gui_scenario_knobs_recompute_and_reset_without_changing_main_result(tmp
     window.scenario.setCurrentText('Reference')
     assert window.result is r
     window.scenario.setCurrentText('Scenario 1')
-    assert window.result.metrics['observed_total_m3'] == pytest.approx(2400)
+    assert window.result.metrics['observed_total_m3'] == pytest.approx(2121.92)
     window.reset()
     assert window.result is r and window.scenarios == []
     assert not window.export_button.isEnabled()

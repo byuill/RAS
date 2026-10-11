@@ -8,10 +8,12 @@ import numpy as np
 import pandas as pd
 
 from .cache import ProfileCache, cache_key, fingerprint
-from .core import CalibrationError, compare_profiles, validate_transects
+from .core import CalibrationError, compare_profiles
 from .qaqc import datum_shift_review, review_survey
 from .sources import model_times, native_volume_audit, read_model_snapshots, read_survey
 from .calculation_audit import CALCULATION_GUIDE, change_error_sigma, volume_uncertainty
+from .display_units import (CUSTOMARY_GUIDE, customary_frame, customary_mapping,
+                            select_river_mile_range)
 
 
 def load_config(path):
@@ -48,7 +50,8 @@ def _load_surveys(settings, names, *, cancel=None):
             raise ValueError('Use projected metre horizontal units.')
     except (ValueError, KeyError, CRSError) as exc:
         raise CalibrationError(f'Invalid analysis_crs: {exc}') from exc
-    transects, _ = validate_transects(pd.read_csv(settings['transects'], dtype={'xs_id': str}))
+    transects = select_river_mile_range(pd.read_csv(settings['transects'], dtype={'xs_id': str}),
+                                       settings.get('river_mile_range'))
     geometry = fingerprint(settings['transects'])
     sources = {name: settings['surveys'][name] for name in names}
     cache_path = Path(settings['cache_dir']).resolve()
@@ -61,7 +64,8 @@ def _load_surveys(settings, names, *, cancel=None):
     integration = settings.get('integration', {})
     extraction = {'analysis_crs': settings['analysis_crs'], 'adapter_version': 3,
                   'sample_spacing_m': integration.get('sample_spacing_m', 10),
-                  'longitudinal_limit_m': integration.get('longitudinal_limit_m', 50)}
+                  'longitudinal_limit_m': integration.get('longitudinal_limit_m', 50),
+                  'river_mile_range': settings.get('river_mile_range')}
     raw, statuses = {}, []
     for name, source in sources.items():
         _cancelled(cancel)
@@ -75,7 +79,7 @@ def _load_surveys(settings, names, *, cancel=None):
             if fingerprint(source['path']) != fingerprints[source['path']] or fingerprint(settings['transects']) != geometry:
                 raise CalibrationError('Survey or geometry changed during extraction; no cache result was committed.')
             cache.put(key, profile)
-        raw[name] = profile
+        raw[name] = profile[profile.xs_id.isin(transects.xs_id)].copy()
         statuses.append({'survey': name, 'key': key, 'hit': hit, 'mapping': profile.attrs.get('mapping')})
     return transects, raw, statuses, geometry, fingerprints
 
@@ -203,6 +207,9 @@ def _pair_result(settings, hdf_path, names, indices, times, transects, reviews, 
     if datum_review['uniform_shift_candidate']:
         warnings.append('A coherent observed vertical shift needs review against benchmarks; it may also be real channel change.')
     provenance = {'algorithm': 'matched-profile-segmented-volume-v3',
+                  'display_units': {'length': 'ft', 'area': 'ft2', 'volume': 'yd3',
+                                    'longitudinal_location': 'model XS river-mile stationing when available',
+                                    'derivatives': 'ft per downstream mile; canonical chainage retained'},
                   'sign': 'deposition positive; erosion negative', 'settings': settings,
                   'calculation_options': result.calculation_options, 'volume_uncertainty': error_report,
                   'model_fingerprint': model_fingerprint,
@@ -301,9 +308,13 @@ def export_comparison(result, provenance, directory):
         if table is not None and len(table):
             filename = {'excluded': 'excluded_sections', 'qaqc': 'survey_qaqc', 'confusion': 'zone_confusion'}.get(name, name)
             table.to_csv(directory/(filename+'.csv'), index=False)
+            customary_frame(table, result.sections).to_csv(directory/(filename+'_customary.csv'), index=False)
     (directory/'report.json').write_text(json.dumps({'metrics': result.metrics, 'provenance': provenance},
                                                    indent=2, allow_nan=False), encoding='utf-8')
     (directory/'calculation_guide.txt').write_text(CALCULATION_GUIDE, encoding='utf-8')
+    (directory/'calculation_guide_customary.txt').write_text(CUSTOMARY_GUIDE, encoding='utf-8')
+    (directory/'metrics_customary.json').write_text(json.dumps(customary_mapping(result.metrics),
+                                                             indent=2, allow_nan=False), encoding='utf-8')
     if result.calculation_inputs:
         inputs = result.calculation_inputs
         inputs['transects'].to_csv(directory/'transects.csv', index=False)
@@ -337,6 +348,7 @@ def export_sensitivity(exploration, provenance, directory):
     import copy
     directory = _output_directory(directory, 'sensitivity', provenance['settings'])
     exploration.summary.to_csv(directory/'sensitivity_summary.csv', index=False)
+    customary_frame(exploration.summary).to_csv(directory/'sensitivity_summary_customary.csv', index=False)
     scenarios = [{'name': name, 'overrides': overrides}
                  for name, result, overrides in exploration.scenarios]
     (directory/'scenarios.json').write_text(json.dumps({'scenarios': scenarios,
@@ -383,6 +395,8 @@ def export_time_series(series, directory):
     directory = _output_directory(directory, 'time-series', series.comparisons[0][1]['settings'])
     series.summary.to_csv(directory/'interval_skill.csv', index=False)
     series.sections.to_csv(directory/'section_time_series.csv', index=False)
+    customary_frame(series.summary).to_csv(directory/'interval_skill_customary.csv', index=False)
+    customary_frame(series.sections).to_csv(directory/'section_time_series_customary.csv', index=False)
     for i, (result, provenance) in enumerate(series.comparisons):
         export_comparison(result, provenance, directory/f'interval-{i:03d}')
     from matplotlib.figure import Figure
@@ -402,6 +416,8 @@ def export_survey_qaqc(reviews, provenance, directory):
         sections.append(review.sections.assign(survey=name))
     pd.concat(audits, ignore_index=True).to_csv(directory/'survey_qaqc.csv', index=False)
     pd.concat(sections, ignore_index=True).to_csv(directory/'survey_coverage.csv', index=False)
+    customary_frame(pd.concat(audits, ignore_index=True)).to_csv(directory/'survey_qaqc_customary.csv', index=False)
+    customary_frame(pd.concat(sections, ignore_index=True)).to_csv(directory/'survey_coverage_customary.csv', index=False)
     (directory/'report.json').write_text(json.dumps({'surveys': {name: review.summary for name, review in reviews.items()},
                                                    'provenance': provenance}, indent=2, allow_nan=False), encoding='utf-8')
     return directory

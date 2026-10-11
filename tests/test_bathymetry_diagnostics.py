@@ -360,7 +360,8 @@ def test_gui_qaqc_without_model_reversible_exclusions_and_saved_config(tmp_path,
     saved = tmp_path/'reviewed.json'
     monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args: (str(saved), 'JSON'))
     window.save_config()
-    assert load_config(saved)['surveys']['target']['qaqc']['elevation_max_m'] == 20
+    # The GUI accepts feet; configuration retains canonical metres.
+    assert load_config(saved)['surveys']['target']['qaqc']['elevation_max_m'] == pytest.approx(20*.3048)
     review.restore()
     review.apply()
     assert not window.settings['surveys']['target']['qaqc']['exclude_flagged']

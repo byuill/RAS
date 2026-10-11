@@ -1,12 +1,12 @@
 # Bed-volume calculation audit and assumption exploration
 
-After comparing a survey pair, open **Calculation audit / assumptions**. The
+After comparing a survey pair, open **Audit calculations / explore assumptions**. The
 reference is the completed comparison. Experiments use its original, reviewed
 model and survey profiles; they do not edit source files, QA/QC decisions, or
 the main comparison. Use the scenario selector to revisit retained results.
 Click **Calculate and keep scenario** after changing knobs. The uncertainty
 knobs apply to every retained scenario in the summary, under one common error
-model. **Reset to reference** discards experiment history and restores controls.
+model. **Clear scenarios / restore reference** discards experiment history and restores controls.
 
 The views show calculation stages, variability/cancellation, sensitivity plots,
 the lateral integration ledger, reach operands, section accounting, and a
@@ -18,7 +18,17 @@ selected. Blue is model and orange is observed, consistently across segments.
 
 ## What the current curves mean
 
-All geometry is in metres; deposition is positive and erosion negative.
+The engine and examples below use SI. The GUI and figures display ft, ft², yd³,
+and model cross-section river miles; deposition is positive and erosion negative.
+GUI knobs with length/elevation units accept feet and convert back to metres.
+In customary units, `dA [ft²] × control_length [ft] / 27 = local_V [yd³]`.
+The displayed ledger equation and customary calculation guide show this divisor
+explicitly. SI and `*_customary.csv` tables are both exported.
+River-mile location comes from the manifest's model station identity or an
+explicit `river_mile` column, not chainage divided by a mile. Verified channel
+lengths control integration; derivative units are ft per downstream mile and
+ft per downstream mile². Selecting a shorter reach updates endpoint control
+weights and retains the original HDF column mapping.
 Sources must have independently verified orientation, units, vertical datum,
 model columns, and survey dates. Those checks cannot be inferred from agreement.
 

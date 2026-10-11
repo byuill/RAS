@@ -45,24 +45,78 @@ ordered and within `survey_alignment_tolerance_days` of the actual survey dates;
 out-of-tolerance comparisons fail. Automatic date matching does not establish
 that a survey spread across several months represents one instantaneous state.
 
+The GUI follows four steps: **Load data**, **Select dates and reach**, **Review
+and calculate**, then **Inspect results and export**. The primary calculation
+button is emphasized; metadata and inventory tools are secondary. Actions are
+enabled when their inputs are ready, and the status strip explains the next
+step or an invalid date selection. Survey QA/QC remains available without an
+HDF. Selecting a survey selects its nearest model date, subject to the alignment
+checks. Changing inputs clears previous results and closes their diagnostic
+windows. QA/QC decisions cannot be applied to different sources or a changed reach.
+
+Displayed elevations, changes, lateral distances, and channel lengths use **ft**;
+areas use **ft²** and bed volumes use **yd³**. QA/QC limits, documented corrections,
+and assumption/error knobs accept feet. A foot is exactly 0.3048 m; a cubic yard
+is exactly 0.9144³ m³. The calculation engine, source mappings, configuration
+keys, and reproducible scenario JSON retain their explicitly named SI units.
+GUI inputs convert back to SI when applied or saved.
+Unedited controls retain their original assumptions exactly, so rounded display
+decimals cannot change whether a gap or minimum-width boundary is accepted.
+
 The main plot shows segment cumulative volume and mean bed elevation change.
 **Pattern diagnostics** adds magnitude scatter, standardized change, observed
 zones, baseline/target elevations, slopes, and concavities. Choose bed-change,
 baseline-bed, or target-bed derivatives. **Cross-section profiles** displays the
 four original interpolated profiles and their changes on accepted intervals,
-without drawing lines across missing-data holes. IDs may be text; physical
-chainage, not an inferred river mile, determines downstream ordering.
+without drawing lines across missing-data holes. Physical chainage determines
+downstream ordering. Longitudinal plots identify location using model cross-section
+river-mile stationing, with upstream on the left and negative RM preserved.
 
-**Compare all survey intervals** sorts configured surveys by acquisition date
+**Calculate all survey intervals** sorts configured surveys by acquisition date
 and compares consecutive pairs. Every interval uses the same common support
 across all selected model and survey epochs. This prevents changing survey width
 or NoData coverage from masquerading as a temporal trend. Model and observed
 annual rates each use their own matched dates. Red/blue heatmaps show deposition/
 erosion through time; black dividers mark disconnected supported segments.
+Heatmap cells are discrete XS samples, rather than a uniformly spaced river-mile
+grid; their tick labels identify the associated river miles and rates are ft/year.
+
+## River-mile stationing and selected reach
+
+For this river, the model cross sections are named by river mile. A numeric XS
+ID such as `236.7`, `-19.6`, or `River:Reach:236.7` supplies that location. A
+trailing HEC-RAS `*` is accepted. Numbers embedded in a text ID such as `XS-3`
+are not treated as river miles. For other ID conventions, add a finite, consistent
+`river_mile` column to the transect manifest. Stations must be unique and monotonic
+within the reach. Text IDs without a mapping display clearly labelled downstream
+distance in miles, without inventing an absolute river-mile origin.
+
+Enable **Limit to a river-mile range** and select upstream and downstream bounds.
+Bounds select existing sections inclusively; the note shows the actual selected
+end stations and count. At least two sections are required. Out-of-manifest bounds
+in a configuration fail rather than being silently clipped. Range selection is
+included in extraction cache keys and used consistently for QA/QC, pair comparisons,
+and time series. Save a configuration copy to retain the selection:
+
+```json
+"river_mile_range": {"upstream": 236.7, "downstream": -19.6}
+```
+
+The checked-in manifest covers RM 953.6 to -19.6. `real_config.json` now selects
+the requested RM **236.7 to -19.6** portion. Existing HDF column indices, channel
+lengths, lateral geometry, and source files remain intact. End-section control
+weights are recalculated for the selected reach. Bounds between stations do not
+create interpolated end sections.
+
+River-mile differences locate plots; verified channel lengths still determine
+volumes. Derivatives retain the downstream-increasing physical chainage basis
+and display as ft per downstream mile and ft per downstream mile². Their signs
+therefore remain downstream-oriented when river-mile labels decrease. Reach
+midpoint labels are the mean of the endpoint river-mile labels.
 
 ## Survey QA/QC
 
-**Calculation audit / assumptions** explains every lateral area, reach volume,
+**Audit calculations / explore assumptions** explains every lateral area, reach volume,
 control-volume contribution, and cumulative prefix with numeric ledgers and
 plots. Explore reconstruction methods, footprint trimming, coverage/gap limits,
 hypothetical survey shifts, thresholds, and correlated survey uncertainty.
@@ -109,7 +163,7 @@ native audits.
 | Diagnostic | Meaning |
 | --- | --- |
 | Signed volume bias, interval volume RMSE/MAE | Amount of geometric change and error; deposition positive, erosion negative |
-| Mean-change RMSE and bias | Bed elevation change error on the matched sampled footprint, in metres |
+| Mean-change RMSE and bias | Bed elevation change error on the matched sampled footprint, displayed in feet |
 | Demeaned change RMSE | Residual spatial-pattern error after removing each series' uniform mean; does not correct the data |
 | Weighted shape/rank correlation | Similarity of the downstream spatial pattern, independent of uniform offset and positive magnitude scaling |
 | Amplitude ratio / regression gain | Whether model spatial variation is too strong/weak; gain relates model change to observed change |
@@ -277,6 +331,13 @@ Time-series exports add `interval_skill.csv`, `section_time_series.csv`, a rate
 heatmap, and complete per-interval results. Standalone QA/QC exports contain all
 sample audit rows and section gap counts.
 
+Each result table also has an explicit `*_customary.csv` companion with `_ft`,
+`_ft2`, `_yd3`, `_mi`, or corresponding rate units in its column names. River-mile
+locations are included when mapped. `metrics_customary.json` and
+`calculation_guide_customary.txt` match the GUI; exported figures use customary
+units. Original CSVs and `report.json` retain SI fields for reproducibility.
+The lateral second moment is ∫Δz² du and displays in ft³, rather than yd³ bed volume.
+
 Raw survey extraction is cached atomically with checksums and content fingerprints.
 The new schema invalidates older processed caches. Geodatabase contents are hashed;
 raster mean or point count alone is not trusted to detect spatial edits. Fingerprints
@@ -298,6 +359,10 @@ not an asserted real RAS layout. Regression cases also test pattern agreement
 with magnitude error, reversed zones, irregular-spacing derivatives, disconnected
 support, robust survey review, direct GeoTIFF/XYZ input, ragged reads, time-series
 support, and GUI review/restore/configuration saving.
+The customary display for the demo total is **+2615.901 yd³**. Regression checks
+also cover feet inputs saved as metres, cubic-yard accounting, negative stations,
+explicit station mappings, range-aware caches, selected-end weights, stale QA/QC
+decisions, and disabled workflow actions.
 
 Real HEC-RAS compatibility, exact native footprint/control-volume accounting,
 ArcGIS licensing, vertical transformations, and project acquisition dates still
