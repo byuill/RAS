@@ -9,6 +9,11 @@ data or local tables. It derives class mass flux from concentration and discharg
 handles grain-class aggregation, and produces plots and calibration diagnostics.
 This reader does not implement 2-D cell/face sediment result analysis.
 
+The [bathymetry comparison tool](bathymetry_calibration/README.md) also provides
+an interactive [volume calculation audit and assumption explorer](bathymetry_calibration/docs/calculation-diagnostics.md),
+including gross erosion/deposition, cancellation, variability, and conditional
+survey-error diagnostics that reveal change hidden by net reach averages.
+
 See the [large-file user guide and validation notes](docs/user-guide.md) for memory
 settings, interpretation limits and inspecting an HDF without sharing result arrays.
 

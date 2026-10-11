@@ -11,6 +11,8 @@ import numpy as np
 def paired_statistics(obs, mod, min_pairs: int = 2) -> dict:
     o = np.asarray(obs, dtype=float)
     m = np.asarray(mod, dtype=float)
+    if o.ndim != 1 or m.shape != o.shape:
+        raise ValueError('Observed and model values must be equally sized vectors; broadcasting is not pairing.')
     ok = np.isfinite(o) & np.isfinite(m)
     o, m = o[ok], m[ok]
     n = int(len(o))

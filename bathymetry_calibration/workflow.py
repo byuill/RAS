@@ -11,6 +11,7 @@ from .cache import ProfileCache, cache_key, fingerprint
 from .core import CalibrationError, compare_profiles, validate_transects
 from .qaqc import datum_shift_review, review_survey
 from .sources import model_times, native_volume_audit, read_model_snapshots, read_survey
+from .calculation_audit import CALCULATION_GUIDE, change_error_sigma, volume_uncertainty
 
 
 def load_config(path):
@@ -146,7 +147,8 @@ def _pair_result(settings, hdf_path, names, indices, times, transects, reviews, 
     uncertainty = [float(source.get('vertical_uncertainty_m', 0)) for source in sources]
     if not np.isfinite(uncertainty).all() or min(uncertainty) < 0:
         raise CalibrationError('Survey vertical_uncertainty_m must be a finite nonnegative one-sigma uncertainty.')
-    detection_limit = 1.96*float(np.linalg.norm(uncertainty))
+    error_options = dict(settings.get('volume_uncertainty', {}))
+    detection_limit = 1.96*change_error_sigma(*uncertainty, **error_options)
     diagnostics['change_threshold_m'] = max(float(diagnostics.get('change_threshold_m', 0.05)), detection_limit)
     integration = dict(settings.get('integration', {}))
     result = compare_profiles(transects, model[indices[0]], model[indices[1]],
@@ -160,6 +162,8 @@ def _pair_result(settings, hdf_path, names, indices, times, transects, reviews, 
         result.metrics[f'{prefix}_duration_years'] = float(years)
         result.metrics[f'{prefix}_volume_change_m3_per_year'] = result.metrics[f'{prefix}_total_m3']/years
     result.metrics['survey_change_detection_limit_95_m'] = detection_limit
+    error_report = volume_uncertainty(result, before_sigma_m=uncertainty[0],
+                                     after_sigma_m=uncertainty[1], **error_options)
     warnings = []
     for name in names:
         count = reviews[name].summary['retained_flagged_points']
@@ -198,8 +202,9 @@ def _pair_result(settings, hdf_path, names, indices, times, transects, reviews, 
     datum_review = datum_shift_review(result.profiles, threshold_m=datum_threshold, stable_controls=stable_controls)
     if datum_review['uniform_shift_candidate']:
         warnings.append('A coherent observed vertical shift needs review against benchmarks; it may also be real channel change.')
-    provenance = {'algorithm': 'matched-profile-segmented-average-end-area-v2',
+    provenance = {'algorithm': 'matched-profile-segmented-volume-v3',
                   'sign': 'deposition positive; erosion negative', 'settings': settings,
+                  'calculation_options': result.calculation_options, 'volume_uncertainty': error_report,
                   'model_fingerprint': model_fingerprint,
                   'model_before_time': str(times[indices[0]]), 'model_after_time': str(times[indices[1]]),
                   'survey_before_time': str(survey_dates[0]), 'survey_after_time': str(survey_dates[1]),
@@ -291,15 +296,25 @@ def _output_directory(parent, prefix, settings):
 
 def export_comparison(result, provenance, directory):
     directory = _output_directory(directory, 'comparison', provenance['settings'])
-    for name in ('sections', 'intervals', 'excluded', 'profiles', 'zones', 'confusion', 'qaqc'):
+    for name in ('sections', 'intervals', 'excluded', 'profiles', 'zones', 'confusion', 'qaqc', 'lateral_audit'):
         table = getattr(result, name)
         if table is not None and len(table):
             filename = {'excluded': 'excluded_sections', 'qaqc': 'survey_qaqc', 'confusion': 'zone_confusion'}.get(name, name)
             table.to_csv(directory/(filename+'.csv'), index=False)
     (directory/'report.json').write_text(json.dumps({'metrics': result.metrics, 'provenance': provenance},
                                                    indent=2, allow_nan=False), encoding='utf-8')
+    (directory/'calculation_guide.txt').write_text(CALCULATION_GUIDE, encoding='utf-8')
+    if result.calculation_inputs:
+        inputs = result.calculation_inputs
+        inputs['transects'].to_csv(directory/'transects.csv', index=False)
+        pd.concat([inputs[name].assign(source=name) for name in
+            ('model_before', 'model_after', 'observed_before', 'observed_after')],
+            ignore_index=True).to_csv(directory/'source_profiles.csv', index=False)
+        if inputs.get('support_profiles'):
+            pd.concat([frame.assign(support_epoch=i) for i, frame in enumerate(inputs['support_profiles'])],
+                ignore_index=True).to_csv(directory/'support_profiles.csv', index=False)
     from matplotlib.figure import Figure
-    from .plots import draw_comparison, draw_diagnostics
+    from .plots import draw_comparison, draw_diagnostics, draw_calculation_audit, draw_variability
     figure = Figure(figsize=(11, 7), constrained_layout=True)
     draw_comparison(figure, result, provenance)
     figure.savefig(directory/'comparison.png', dpi=150)
@@ -308,7 +323,60 @@ def export_comparison(result, provenance, directory):
     draw_diagnostics(figure, result)
     figure.savefig(directory/'diagnostics.png', dpi=150)
     figure.clear()
+    figure = Figure(figsize=(12, 9), constrained_layout=True)
+    draw_calculation_audit(figure, result, result.sections.xs_id.iloc[0])
+    figure.savefig(directory/'calculation_audit.png', dpi=150)
+    draw_variability(figure, result)
+    figure.savefig(directory/'variability.png', dpi=150)
+    figure.clear()
     return directory
+
+
+def export_sensitivity(exploration, provenance, directory):
+    """Export reference, every available scenario, overrides, and failed-run reasons."""
+    import copy
+    directory = _output_directory(directory, 'sensitivity', provenance['settings'])
+    exploration.summary.to_csv(directory/'sensitivity_summary.csv', index=False)
+    scenarios = [{'name': name, 'overrides': overrides}
+                 for name, result, overrides in exploration.scenarios]
+    (directory/'scenarios.json').write_text(json.dumps({'scenarios': scenarios,
+        'uncertainty': exploration.uncertainty,
+        'availability': {name: result is not None for name, result, _ in exploration.scenarios},
+        'interpretation': 'Sensitivity experiments on reviewed source profiles; support_changed totals '
+                          'are different footprints. Hypothetical shifts are not datum corrections.'},
+        indent=2, allow_nan=False), encoding='utf-8')
+    from matplotlib.figure import Figure
+    from .plots import draw_sensitivity
+    figure = Figure(figsize=(11, 8), constrained_layout=True)
+    draw_sensitivity(figure, exploration)
+    figure.savefig(directory/'sensitivity.png', dpi=150)
+    figure.clear()
+    reference_provenance = copy.deepcopy(provenance)
+    reference_provenance['volume_uncertainty'] = volume_uncertainty(exploration.reference, **exploration.uncertainty)
+    reference_provenance['sensitivity'] = {'name': 'Reference', 'overrides': {}, 'support_changed': False}
+    export_comparison(exploration.reference, reference_provenance, directory/'reference')
+    for index, (name, result, overrides) in enumerate(exploration.scenarios):
+        if result is None:
+            continue
+        scenario_provenance = copy.deepcopy(provenance)
+        # Native audit and datum screen belong to the reference, not to recomputations.
+        scenario_provenance.pop('datum_review', None)
+        scenario_provenance['native_audit'] = 'not rerun for sensitivity experiment'
+        scenario_provenance['settings']['integration'] = {
+            k: v for k, v in result.calculation_options.items() if k != 'diagnostics'}
+        scenario_provenance['settings']['diagnostics'] = result.calculation_options['diagnostics']
+        scenario_provenance['calculation_options'] = result.calculation_options
+        scenario_provenance['sensitivity'] = {'name': name, 'overrides': overrides,
+            'support_changed': support_changed(exploration, name)}
+        scenario_provenance['volume_uncertainty'] = volume_uncertainty(result, **exploration.uncertainty)
+        scenario_provenance['warnings'] = ['Sensitivity experiment; consult reference survey QA/QC. '
+            'Hypothetical target shifts are not verified corrections; compare support before interpreting volume deltas.']
+        export_comparison(result, scenario_provenance, directory/f'scenario-{index:03d}')
+    return directory
+
+
+def support_changed(exploration, name):
+    return bool(exploration.summary.loc[exploration.summary.name == name, 'support_changed'].iloc[0])
 
 
 def export_time_series(series, directory):

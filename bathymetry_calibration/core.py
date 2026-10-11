@@ -99,6 +99,9 @@ class Comparison:
     zones: pd.DataFrame = field(default_factory=pd.DataFrame)
     confusion: pd.DataFrame = field(default_factory=pd.DataFrame)
     qaqc: pd.DataFrame = field(default_factory=pd.DataFrame)
+    lateral_audit: pd.DataFrame = field(default_factory=pd.DataFrame)
+    calculation_inputs: dict = field(default_factory=dict, repr=False)
+    calculation_options: dict = field(default_factory=dict)
 
 
 def common_domain_grid(extents, spacing_m, min_width_m):
@@ -116,7 +119,8 @@ def compare_profiles(transects, model_before, model_after, observed_before, obse
                      *, max_gap_m=25.0, min_coverage=1.0, max_reach_length_m=10000.0,
                      grid_spacing_m=10.0, min_common_width_m=0.0, domain_mode='intersection',
                      support_profiles=None, diagnostics=None, sample_spacing_m=10.0,
-                     longitudinal_limit_m=50.0):
+                     longitudinal_limit_m=50.0, longitudinal_method='average_end_area',
+                     lateral_trim_fraction=0.0):
     """Integrate matched profiles without bridging unsupported XS or lateral holes.
 
     Intersection mode compares the overlap of all profiles within each manifest
@@ -129,6 +133,10 @@ def compare_profiles(transects, model_before, model_after, observed_before, obse
         raise CalibrationError('Coverage and gap controls must be finite and valid.')
     if domain_mode not in ('intersection', 'transect'):
         raise CalibrationError('domain_mode must be intersection or transect.')
+    if longitudinal_method not in ('average_end_area', 'upstream', 'downstream'):
+        raise CalibrationError('longitudinal_method must be average_end_area, upstream, or downstream.')
+    if not np.isfinite(lateral_trim_fraction) or not 0 <= lateral_trim_fraction < .5:
+        raise CalibrationError('lateral_trim_fraction must be finite, at least zero and below 0.5 per bank.')
     transects, metadata = validate_transects(transects)
     sources = [normalize_profile(p) for p in (model_before, model_after, observed_before, observed_after)]
     support = sources + [normalize_profile(p) for p in (support_profiles or [])]
@@ -140,12 +148,14 @@ def compare_profiles(transects, model_before, model_after, observed_before, obse
     for position, row in enumerate(metadata.itertuples()):
         geometry = geometry_groups[row.xs_id]
         footprint = (float(geometry.u_m.min()), float(geometry.u_m.max()))
+        trim = (footprint[1]-footprint[0])*lateral_trim_fraction
+        selected_footprint = (footprint[0]+trim, footprint[1]-trim)
         profiles_at_xs = [groups.get(row.xs_id, empty) for groups in grouped]
         extents = [profile_extent(p, row.xs_id) for p in profiles_at_xs]
         diag = {'xs_id': row.xs_id, 'chainage_m': row.chainage_m}
         for name, extent in zip(names, extents):
             diag[f'{name}_u_min'], diag[f'{name}_u_max'] = extent or (np.nan, np.nan)
-        domain = extents + [footprint] if domain_mode == 'intersection' else [footprint]
+        domain = extents + [selected_footprint] if domain_mode == 'intersection' else [selected_footprint]
         u = common_domain_grid(domain, min(grid_spacing_m, max_gap_m/2), min_common_width_m)
         if u is None:
             skipped.append({**diag, 'reason': 'no/insufficient common lateral extent', 'coverage': 0.0})
@@ -157,30 +167,36 @@ def compare_profiles(transects, model_before, model_after, observed_before, obse
         values = [interpolate_profile(p, row.xs_id, u, max_gap_m) for p in profiles_at_xs]
         valid = np.logical_and.reduce([np.isfinite(v) for v in values])
         midpoints = (u[:-1]+u[1:])/2
-        midpoint_valid = np.logical_and.reduce([
-            np.isfinite(interpolate_profile(p, row.xs_id, midpoints, max_gap_m)) for p in profiles_at_xs])
+        midpoint_sources = [np.isfinite(interpolate_profile(p, row.xs_id, midpoints, max_gap_m))
+                            for p in profiles_at_xs]
+        midpoint_valid = np.logical_and.reduce(midpoint_sources)
         widths = np.diff(u)
         accepted = valid[:-1] & valid[1:] & midpoint_valid
         effective = float(widths[accepted].sum())
         coverage = effective/float(widths.sum())
-        if effective <= 0 or coverage < min_coverage-1e-10:
-            skipped.append({**diag, 'reason': 'common-domain data coverage below minimum', 'coverage': coverage})
+        if effective <= 0 or coverage < min_coverage-1e-10 or effective < min_common_width_m:
+            skipped.append({**diag, 'reason': 'common-domain data coverage or effective width below minimum', 'coverage': coverage})
             continue
         dm, do = values[1]-values[0], values[3]-values[2]
         def area(v):
             return float(np.sum(0.5*(v[:-1][accepted]+v[1:][accepted])*widths[accepted]))
         accepted_points = np.r_[accepted, False] | np.r_[False, accepted]
-        sampled.append(pd.DataFrame({'xs_id': row.xs_id, 'u_m': u, 'chainage_m': row.chainage_m,
+        sample = pd.DataFrame({'xs_id': row.xs_id, 'u_m': u, 'chainage_m': row.chainage_m,
                                      'model_before_z_m': values[0], 'model_after_z_m': values[1],
                                      'observed_before_z_m': values[2], 'observed_after_z_m': values[3],
                                      'model_change_m': dm, 'observed_change_m': do,
                                      'accepted_point': accepted_points,
-                                     'accepted_interval_to_next': np.r_[accepted, False]}))
+                                     'midpoint_supported_to_next': np.r_[midpoint_valid, False],
+                                     'accepted_interval_to_next': np.r_[accepted, False]})
+        for name, supported in zip(names, midpoint_sources):
+            sample[f'{name}_midpoint_supported_to_next'] = np.r_[supported, False]
+        sampled.append(sample)
         rows.append({'xs_id': row.xs_id, 'model_column': int(row.model_column), 'source_position': position,
                      'chainage_m': row.chainage_m, 'length_to_next_m': row.length_to_next_m,
                      'coverage': coverage, 'footprint_coverage': effective/(footprint[1]-footprint[0]),
                      'common_u_min_m': float(u[0]), 'common_u_max_m': float(u[-1]),
                      'common_width_m': float(u[-1]-u[0]), 'effective_width_m': effective,
+                     'selected_footprint_width_m': selected_footprint[1]-selected_footprint[0],
                      'model_area_change_m2': area(dm), 'observed_area_change_m2': area(do),
                      'model_baseline_elev_m': area(values[0])/effective,
                      'model_target_elev_m': area(values[1])/effective,
@@ -208,11 +224,13 @@ def compare_profiles(transects, model_before, model_after, observed_before, obse
         raise CalibrationError('A reach gap exceeds the configured integration limit.')
     table['segment_id'] = np.r_[0, np.cumsum(~adjacent)]
     m, o = table.model_area_change_m2.to_numpy(), table.observed_area_change_m2.to_numpy()
-    model = 0.5*(m[upstream]+m[upstream+1])*lengths
-    observed = 0.5*(o[upstream]+o[upstream+1])*lengths
+    left, right = {'average_end_area': (.5, .5), 'upstream': (1., 0.),
+                   'downstream': (0., 1.)}[longitudinal_method]
+    model = (left*m[upstream]+right*m[upstream+1])*lengths
+    observed = (left*o[upstream]+right*o[upstream+1])*lengths
     weights = np.zeros(len(table))
-    weights[upstream] += lengths/2
-    weights[upstream+1] += lengths/2
+    weights[upstream] += lengths*left
+    weights[upstream+1] += lengths*right
     table['control_length_m'] = weights
     table['model_local_control_volume_m3'] = m*weights
     table['observed_local_control_volume_m3'] = o*weights
@@ -225,6 +243,11 @@ def compare_profiles(transects, model_before, model_after, observed_before, obse
     intervals = pd.DataFrame({'upstream_xs': table.xs_id.to_numpy()[upstream],
                               'downstream_xs': table.xs_id.to_numpy()[upstream+1],
                               'segment_id': table.segment_id.to_numpy()[upstream], 'length_m': lengths,
+                              'upstream_chainage_m': table.chainage_m.to_numpy()[upstream],
+                              'downstream_chainage_m': table.chainage_m.to_numpy()[upstream+1],
+                              'upstream_weight': left, 'downstream_weight': right,
+                              'model_upstream_area_m2': m[upstream], 'model_downstream_area_m2': m[upstream+1],
+                              'observed_upstream_area_m2': o[upstream], 'observed_downstream_area_m2': o[upstream+1],
                               'mid_chainage_m': (table.chainage_m.to_numpy()[upstream]+table.chainage_m.to_numpy()[upstream+1])/2,
                               'model_volume_change_m3': model, 'observed_volume_change_m3': observed,
                               'residual_m3': model-observed})
@@ -241,5 +264,15 @@ def compare_profiles(transects, model_before, model_after, observed_before, obse
     samples = pd.concat(sampled, ignore_index=True)
     samples = samples[samples.xs_id.isin(table.xs_id)].reset_index(drop=True)
     result = Comparison(table.drop(columns='source_position'), intervals, metrics, excluded, samples)
+    result.calculation_options = dict(max_gap_m=max_gap_m, min_coverage=min_coverage,
+        max_reach_length_m=max_reach_length_m, grid_spacing_m=grid_spacing_m,
+        min_common_width_m=min_common_width_m, domain_mode=domain_mode,
+        longitudinal_method=longitudinal_method, lateral_trim_fraction=lateral_trim_fraction,
+        sample_spacing_m=sample_spacing_m, longitudinal_limit_m=longitudinal_limit_m,
+        diagnostics=dict(diagnostics or {}))
+    result.calculation_inputs = dict(transects=transects.copy(), model_before=sources[0],
+        model_after=sources[1], observed_before=sources[2], observed_after=sources[3],
+        support_profiles=support[4:])
     from .diagnostics import add_diagnostics
-    return add_diagnostics(result, **(diagnostics or {}))
+    from .calculation_audit import add_calculation_audit
+    return add_calculation_audit(add_diagnostics(result, **(diagnostics or {})))

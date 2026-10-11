@@ -5,7 +5,8 @@ import json
 from .core import CalibrationError
 from .sources import model_times
 from .workflow import (export_comparison, export_survey_qaqc, export_time_series, load_config,
-                       match_survey_times, run_comparison, run_survey_qaqc, run_time_series)
+                       match_survey_times, run_comparison, run_survey_qaqc, run_time_series,
+                       export_sensitivity)
 
 
 def main(argv=None):
@@ -22,7 +23,10 @@ def main(argv=None):
     parser.add_argument('--before-index', type=int)
     parser.add_argument('--after-index', type=int)
     parser.add_argument('--output', default='output/bathymetry')
+    parser.add_argument('--sensitivity', help='JSON with scenarios and optional uncertainty; requires --headless')
     args = parser.parse_args(argv)
+    if args.sensitivity and not args.headless:
+        parser.error('--sensitivity requires --headless')
     try:
         settings = load_config(args.config)
         hdf = args.hdf or settings.get('model', {}).get('path')
@@ -47,8 +51,23 @@ def main(argv=None):
                 matched = match_survey_times(settings, model_times(hdf, settings['model']), names)
                 indices = [matched[i] if value is None else value for i, value in enumerate(indices)]
             result, provenance = run_comparison(settings, hdf, *names, *indices)
-            saved = export_comparison(result, provenance, args.output)
+            if args.sensitivity:
+                from pathlib import Path
+                from .calculation_audit import run_sensitivity
+                specifications = json.loads(Path(args.sensitivity).read_text(encoding='utf-8'))
+                if not isinstance(specifications, dict):
+                    raise CalibrationError('Sensitivity specifications must be a JSON object.')
+                error = provenance['volume_uncertainty']
+                defaults = {key: error[key] for key in
+                    ('before_sigma_m', 'after_sigma_m', 'temporal_correlation', 'spatial_correlation')}
+                defaults.update(specifications.get('uncertainty', {}))
+                exploration = run_sensitivity(result, specifications['scenarios'], uncertainty=defaults)
+                saved = export_sensitivity(exploration, provenance, args.output)
+            else:
+                saved = export_comparison(result, provenance, args.output)
             payload = {'metrics': result.metrics, 'warnings': provenance['warnings'], 'export': str(saved)}
+            if args.sensitivity:
+                payload['sensitivity_scenarios'] = json.loads(exploration.summary.to_json(orient='records'))
         else:
             from PySide6.QtWidgets import QApplication
             from .gui import CalibrationWindow
