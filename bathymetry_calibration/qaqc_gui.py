@@ -8,6 +8,8 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog
     QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QTableWidget, QTableWidgetItem,
     QTextEdit, QVBoxLayout, QWidget)
 
+from .display_units import (FT_PER_M, customary_frame, customary_mapping, customary_header,
+                            read_customary_spin, set_customary_spin)
 from .qaqc import review_survey
 from .workflow import export_survey_qaqc
 
@@ -28,10 +30,10 @@ class SurveyQaqcWindow(QMainWindow):
         self.exclude_flags = QCheckBox('Exclude elevation/spike/slope flags when applied')
         self.duplicate_policy = QComboBox()
         self.duplicate_policy.addItems(['error', 'mean', 'median'])
-        self.spike_min = self._spin(0, 1000, 1)
-        self.low_enabled, self.high_enabled, self.slope_enabled = QCheckBox('Minimum elevation (m)'), QCheckBox('Maximum elevation (m)'), QCheckBox('Maximum lateral slope (m/m)')
-        self.low, self.high, self.slope = self._spin(-1e6, 1e6, -100), self._spin(-1e6, 1e6, 100), self._spin(.001, 1000, 1)
-        self.offset = self._spin(-100, 100, 0)
+        self.spike_min = self._spin(0, 1000*FT_PER_M, FT_PER_M, FT_PER_M)
+        self.low_enabled, self.high_enabled, self.slope_enabled = QCheckBox('Minimum elevation (ft)'), QCheckBox('Maximum elevation (ft)'), QCheckBox('Maximum lateral slope (ft/ft)')
+        self.low, self.high, self.slope = self._spin(-1e6*FT_PER_M, 1e6*FT_PER_M, -100*FT_PER_M, FT_PER_M), self._spin(-1e6*FT_PER_M, 1e6*FT_PER_M, 100*FT_PER_M, FT_PER_M), self._spin(.001, 1000, 1)
+        self.offset = self._spin(-100*FT_PER_M, 100*FT_PER_M, 0, FT_PER_M)
         self.evidence = QLineEdit()
         self.evidence.setPlaceholderText('Independent benchmark/datum evidence required for a correction')
         self.table = QTableWidget()
@@ -50,9 +52,9 @@ class SurveyQaqcWindow(QMainWindow):
             selectors.addWidget(widget)
         layout.addLayout(selectors)
         controls = QFormLayout()
-        for label, control in [('Duplicate station decision', self.duplicate_policy), ('Minimum spike deviation (m)', self.spike_min),
+        for label, control in [('Duplicate station decision', self.duplicate_policy), ('Minimum spike deviation (ft)', self.spike_min),
                                (self.low_enabled, self.low), (self.high_enabled, self.high), (self.slope_enabled, self.slope),
-                               ('Documented elevation correction (m)', self.offset), ('Correction evidence', self.evidence)]:
+                               ('Documented elevation correction (ft)', self.offset), ('Correction evidence', self.evidence)]:
             controls.addRow(label, control)
         layout.addLayout(controls)
         layout.addWidget(self.exclude_flags)
@@ -68,6 +70,10 @@ class SurveyQaqcWindow(QMainWindow):
             button.clicked.connect(callback)
             actions.addWidget(button)
         layout.addLayout(actions)
+        self.apply_button.setMinimumHeight(36)
+        self.apply_button.setStyleSheet('QPushButton { font-weight: bold; padding: 6px; }')
+        self.preview_button.setText('1  Preview limits')
+        self.apply_button.setText('2  Apply reviewed decisions')
         layout.addWidget(QLabel('Flags do not prove errors. Missing/excluded values remain gaps; source surveys are never edited.'))
         layout.addWidget(self.table, 2)
         layout.addWidget(self.canvas, 1)
@@ -78,27 +84,27 @@ class SurveyQaqcWindow(QMainWindow):
         self.load_controls()
 
     @staticmethod
-    def _spin(low, high, value):
+    def _spin(low, high, value, factor=1):
         control = QDoubleSpinBox()
         control.setRange(low, high)
-        control.setDecimals(3)
-        control.setValue(value)
+        control.setDecimals(6)
+        set_customary_spin(control, value/factor, factor)
         return control
 
     def load_controls(self, *_):
         name = self.survey.currentText()
         options = self.options[name]
         self.duplicate_policy.setCurrentText(options.get('duplicate_policy', 'error'))
-        self.spike_min.setValue(options.get('spike_min_m', 1))
+        set_customary_spin(self.spike_min, options.get('spike_min_m', 1))
         self.exclude_flags.setChecked(options.get('exclude_flagged', False))
-        self.offset.setValue(options.get('datum_correction_m', 0))
+        set_customary_spin(self.offset, options.get('datum_correction_m', 0))
         self.evidence.setText(options.get('datum_correction_evidence', ''))
         for enabled, spin, key in [(self.low_enabled, self.low, 'elevation_min_m'),
                                    (self.high_enabled, self.high, 'elevation_max_m'),
                                    (self.slope_enabled, self.slope, 'max_slope_m_per_m')]:
             enabled.setChecked(key in options)
             if key in options:
-                spin.setValue(options[key])
+                set_customary_spin(spin, options[key], 1 if key == 'max_slope_m_per_m' else FT_PER_M)
         self.section.blockSignals(True)
         self.section.clear()
         self.section.addItems(self.raw[name].xs_id.drop_duplicates().tolist())
@@ -107,15 +113,15 @@ class SurveyQaqcWindow(QMainWindow):
 
     def collect_options(self):
         options = copy.deepcopy(self.options[self.survey.currentText()])
-        options.update(duplicate_policy=self.duplicate_policy.currentText(), spike_min_m=self.spike_min.value(),
-                       exclude_flagged=self.exclude_flags.isChecked(), datum_correction_m=self.offset.value(),
+        options.update(duplicate_policy=self.duplicate_policy.currentText(), spike_min_m=read_customary_spin(self.spike_min),
+                       exclude_flagged=self.exclude_flags.isChecked(), datum_correction_m=read_customary_spin(self.offset),
                        datum_correction_evidence=self.evidence.text())
         for enabled, spin, key in [(self.low_enabled, self.low, 'elevation_min_m'),
                                    (self.high_enabled, self.high, 'elevation_max_m'),
                                    (self.slope_enabled, self.slope, 'max_slope_m_per_m')]:
             options.pop(key, None)
             if enabled.isChecked():
-                options[key] = spin.value()
+                options[key] = read_customary_spin(spin, 1 if key == 'max_slope_m_per_m' else FT_PER_M)
         return options
 
     def preview(self):
@@ -137,24 +143,26 @@ class SurveyQaqcWindow(QMainWindow):
         rows = review.audit[review.audit.xs_id == self.section.currentText()]
         self.figure.clear()
         axis = self.figure.subplots()
-        axis.plot(rows.u_m, rows.original_z_m, '.', label='Original elevations')
-        axis.plot(rows.u_m, rows.used_z_m, '.', label='Used elevations')
+        axis.plot(rows.u_m*FT_PER_M, rows.original_z_m*FT_PER_M, '.', label='Original elevations')
+        axis.plot(rows.u_m*FT_PER_M, rows.used_z_m*FT_PER_M, '.', label='Used elevations')
         flags = rows[rows.flagged]
-        axis.scatter(flags.u_m, flags.original_z_m, c='firebrick', marker='x', label='Review flags')
-        axis.set(xlabel='Lateral station (m)', ylabel='Elevation (m)', title=self.section.currentText())
+        axis.scatter(flags.u_m*FT_PER_M, flags.original_z_m*FT_PER_M, c='firebrick', marker='x', label='Review flags')
+        axis.set(xlabel='Lateral station (ft)', ylabel='Elevation (ft)', title=self.section.currentText())
         axis.legend()
         self.canvas.draw_idle()
         visible = rows[rows.flagged | rows.excluded] if self.flags_only.isChecked() else rows
         self.visible = visible.head(2000)
         columns = ['xs_id', 'u_m', 'original_z_m', 'used_z_m', 'flag_reasons', 'excluded', 'manual_exclusion_reason']
+        display = customary_frame(self.visible[columns])
+        columns = list(display.columns)
         self.table.setRowCount(len(self.visible))
         self.table.setColumnCount(len(columns))
-        self.table.setHorizontalHeaderLabels(columns)
-        for i, (_, row) in enumerate(self.visible.iterrows()):
+        self.table.setHorizontalHeaderLabels([customary_header(column) for column in columns])
+        for i, (_, row) in enumerate(display.iterrows()):
             for j, column in enumerate(columns):
                 self.table.setItem(i, j, QTableWidgetItem(str(row[column])))
         self.table.resizeColumnsToContents()
-        self.message.setPlainText(json.dumps(review.summary, indent=2)+f'\nShowing {len(self.visible)} of {len(visible)} matching rows. Export contains all rows.')
+        self.message.setPlainText(json.dumps(customary_mapping(review.summary), indent=2)+f'\nShowing {len(self.visible)} of {len(visible)} matching rows. Export contains all rows.')
 
     def exclude_selected(self):
         options = self.collect_options()

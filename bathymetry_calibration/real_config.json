@@ -9,6 +9,10 @@
   "survey_alignment_tolerance_days": 10.0,
   "baseline_model_output_index": 3226,
   "target_model_output_index": 7609,
+  "river_mile_range": {
+    "upstream": 236.7,
+    "downstream": -19.6
+  },
   "integration": {
     "max_gap_m": 50.0,
     "min_coverage": 0.5,

@@ -56,6 +56,7 @@ def interpolate_profile(frame, xs_id, target_u, max_gap_m):
 
 
 def validate_transects(frame):
+    from .display_units import river_miles
     required = {'xs_id', 'model_column', 'chainage_m', 'length_to_next_m', 'u_m', 'x_m', 'y_m'}
     if not required <= set(frame):
         raise CalibrationError(f'Transects require columns {sorted(required)}.')
@@ -63,6 +64,10 @@ def validate_transects(frame):
     if frame.xs_id.isna().any() or frame.xs_id.astype(str).str.strip().eq('').any():
         raise CalibrationError('Transect cross-section IDs must be present.')
     frame['xs_id'] = frame.xs_id.astype(str)
+    if 'river_mile' in frame:
+        frame['river_mile'] = pd.to_numeric(frame.river_mile, errors='raise')
+        if not np.isfinite(frame.river_mile).all():
+            raise CalibrationError('Explicit river_mile values must be finite.')
     for column in required - {'xs_id'}:
         frame[column] = pd.to_numeric(frame[column], errors='raise')
     if not np.isfinite(frame[list(required - {'xs_id', 'length_to_next_m'})]).all().all():
@@ -71,7 +76,7 @@ def validate_transects(frame):
         raise CalibrationError('Duplicate transect stations.')
     metadata = []
     for xs_id, group in frame.groupby('xs_id', sort=False):
-        for column in ('model_column', 'chainage_m', 'length_to_next_m'):
+        for column in ('model_column', 'chainage_m', 'length_to_next_m', *(['river_mile'] if 'river_mile' in frame else [])):
             if group[column].nunique(dropna=False) != 1:
                 raise CalibrationError(f'{xs_id}: inconsistent {column}.')
         if len(group) < 2:
@@ -80,6 +85,12 @@ def validate_transects(frame):
     sections = pd.DataFrame(metadata).sort_values('chainage_m').reset_index(drop=True)
     if len(sections) < 2 or (np.diff(sections.chainage_m) <= 0).any():
         raise CalibrationError('Select one reach with unique downstream-increasing chainage and at least two XS.')
+    rm = river_miles(sections)
+    if np.isfinite(rm).all():
+        if not ((np.diff(rm) < 0).all() or (np.diff(rm) > 0).all()):
+            raise CalibrationError('River-mile stationing must be unique and monotonic within the selected reach.')
+        frame['river_mile'] = frame.xs_id.map(dict(zip(sections.xs_id, rm)))
+        sections['river_mile'] = rm
     columns = sections.model_column.to_numpy()
     if (columns < 0).any() or (columns != np.floor(columns)).any() or len(set(columns)) != len(columns):
         raise CalibrationError('Model columns must be distinct nonnegative integer HDF column indices.')
@@ -264,6 +275,14 @@ def compare_profiles(transects, model_before, model_after, observed_before, obse
     samples = pd.concat(sampled, ignore_index=True)
     samples = samples[samples.xs_id.isin(table.xs_id)].reset_index(drop=True)
     result = Comparison(table.drop(columns='source_position'), intervals, metrics, excluded, samples)
+    if 'river_mile' in metadata:
+        lookup = metadata.set_index('xs_id').river_mile
+        for output in (result.sections, result.profiles, result.excluded):
+            if 'xs_id' in output:
+                output['river_mile'] = output.xs_id.map(lookup)
+        result.intervals['upstream_river_mile'] = result.intervals.upstream_xs.map(lookup)
+        result.intervals['downstream_river_mile'] = result.intervals.downstream_xs.map(lookup)
+        result.intervals['mid_river_mile'] = (result.intervals.upstream_river_mile+result.intervals.downstream_river_mile)/2
     result.calculation_options = dict(max_gap_m=max_gap_m, min_coverage=min_coverage,
         max_reach_length_m=max_reach_length_m, grid_spacing_m=grid_spacing_m,
         min_common_width_m=min_common_width_m, domain_mode=domain_mode,

@@ -11,7 +11,9 @@ from PySide6.QtWidgets import (QComboBox, QDoubleSpinBox, QFileDialog, QFormLayo
     QTableWidgetItem, QTabWidget, QTextEdit, QVBoxLayout, QWidget)
 
 from gui.workers import WorkerManager
-from .calculation_audit import CALCULATION_GUIDE, run_sensitivity, volume_uncertainty
+from .calculation_audit import run_sensitivity, volume_uncertainty
+from .display_units import (FT_PER_M, customary_column, customary_frame, customary_header,
+                            read_customary_spin, set_customary_spin, CUSTOMARY_GUIDE)
 from .plots import draw_calculation_audit, draw_variability, draw_sensitivity
 from .workflow import export_sensitivity
 
@@ -45,7 +47,7 @@ class CalculationAuditWindow(QMainWindow):
         self.message.setReadOnly(True)
         self.message.setMaximumHeight(145)
         self.run_button = QPushButton('Calculate and keep scenario')
-        self.reset_button = QPushButton('Reset to reference')
+        self.reset_button = QPushButton('Clear scenarios / restore reference')
         self.export_button = QPushButton('Export scenario comparison and audits')
         self.export_button.setEnabled(False)
         self.export_specs_button = QPushButton('Save scenario instructions')
@@ -60,6 +62,8 @@ class CalculationAuditWindow(QMainWindow):
         label.setWordWrap(True)
         controls_layout.addWidget(label)
         form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        form.addRow(QLabel('<b>1  Spatial support and integration</b>'))
         method = QComboBox()
         for text, value in [('Average end area (default)', 'average_end_area'),
                             ('Upstream area held through reach', 'upstream'),
@@ -72,21 +76,27 @@ class CalculationAuditWindow(QMainWindow):
         self.controls['domain_mode'] = domain
         form.addRow('Lateral domain', domain)
         for key, text, low, high, tip in [
-            ('max_gap_m', 'Maximum source gap (m)', .001, 1e6, 'NoData barriers are always retained, even at a large gap limit.'),
+            ('max_gap_m', 'Maximum source gap (ft)', .001, 1e6, 'NoData barriers are always retained, even at a large gap limit.'),
             ('min_coverage', 'Minimum domain coverage', .001, 1, 'Sections below this coverage disconnect the reach; gaps are never filled.'),
-            ('min_common_width_m', 'Minimum accepted width (m)', 0, 1e6, 'Required effective width after removing unsupported lateral intervals.'),
-            ('grid_spacing_m', 'Integration grid spacing (m)', .001, 1e6, 'All source knots remain; exact linear integration should be invariant to this spacing.'),
+            ('min_common_width_m', 'Minimum accepted width (ft)', 0, 1e6, 'Required effective width after removing unsupported lateral intervals.'),
+            ('grid_spacing_m', 'Integration grid spacing (ft)', .001, 1e6, 'All source knots remain; exact linear integration should be invariant to this spacing.'),
             ('lateral_trim_fraction', 'Trim fraction per bank', 0, .49, 'Symmetric fraction of the original manifest width; changes the sampled footprint.'),
-            ('change_threshold_m', 'Classification threshold (m)', 0, 1000, 'Changes class fractions and zones, while retaining all signed volume.'),
-            ('observed_target_shift_m', 'Hypothetical target shift (m)', -100, 100, 'Sensitivity experiment only. Not a verified datum correction; sign is added to target survey.'),
-            ('before_sigma_m', 'Baseline survey error σ (m)', 0, 100, 'One-sigma error coherent across each section; supply evidence-based uncertainty.'),
-            ('after_sigma_m', 'Target survey error σ (m)', 0, 100, 'One-sigma error coherent across each section; model treated as exact.'),
+            ('change_threshold_m', 'Classification threshold (ft)', 0, 1000, 'Changes class fractions and zones, while retaining all signed volume.'),
+            ('observed_target_shift_m', 'Hypothetical target shift (ft)', -100, 100, 'Sensitivity experiment only. Not a verified datum correction; sign is added to target survey.'),
+            ('before_sigma_m', 'Baseline survey error σ (ft)', 0, 100, 'One-sigma error coherent across each section; supply evidence-based uncertainty.'),
+            ('after_sigma_m', 'Target survey error σ (ft)', 0, 100, 'One-sigma error coherent across each section; model treated as exact.'),
             ('temporal_correlation', 'Before/after error correlation', -1, 1, '0 independent epochs; 1 shared error that can cancel when survey sigmas match.'),
             ('spatial_correlation', 'Between-XS error correlation', 0, 1, '0 independent sections; 1 fully coherent reach error (conservative default).'),
         ]:
+            if key == 'change_threshold_m':
+                form.addRow(QLabel('<b>2  Change assumptions</b>'))
+            elif key == 'before_sigma_m':
+                form.addRow(QLabel('<b>3  Survey error model</b>'))
             spin = QDoubleSpinBox()
-            spin.setDecimals(4)
-            spin.setRange(low, high)
+            spin.setDecimals(6)
+            factor = FT_PER_M if key.endswith('_m') else 1
+            spin.setRange(low*factor, high*factor)
+            spin.setSingleStep(.1 if factor != 1 else .01)
             spin.setToolTip(tip)
             self.controls[key] = spin
             form.addRow(text, spin)
@@ -130,7 +140,7 @@ class CalculationAuditWindow(QMainWindow):
             self.tabs.addTab(table, text)
         guide = QTextEdit()
         guide.setReadOnly(True)
-        guide.setPlainText(CALCULATION_GUIDE+'\n'+volume_uncertainty(reference)['interpretation'])
+        guide.setPlainText(CUSTOMARY_GUIDE+'\n'+volume_uncertainty(reference)['interpretation'])
         self.tabs.addTab(guide, 'How it works')
         right_layout.addWidget(self.tabs)
         self.calculation_text = QLabel()
@@ -138,6 +148,8 @@ class CalculationAuditWindow(QMainWindow):
         right_layout.addWidget(self.calculation_text)
         right_layout.addWidget(self.message)
         layout.addWidget(right, 1)
+        self.run_button.setMinimumHeight(38)
+        self.run_button.setStyleSheet('QPushButton { font-weight: bold; padding: 7px; }')
         self.run_button.clicked.connect(self.calculate)
         self.reset_button.clicked.connect(self.reset)
         self.export_button.clicked.connect(self.export)
@@ -166,7 +178,7 @@ class CalculationAuditWindow(QMainWindow):
                 index = widget.findData(defaults[key]) if key == 'longitudinal_method' else widget.findText(defaults[key])
                 widget.setCurrentIndex(index)
             else:
-                widget.setValue(defaults[key])
+                set_customary_spin(widget, defaults[key], FT_PER_M if key.endswith('_m') else 1)
         self.export_button.setEnabled(False)
         self.export_specs_button.setEnabled(False)
         self.populate(self.summary_table, pd.DataFrame())
@@ -177,7 +189,8 @@ class CalculationAuditWindow(QMainWindow):
 
     def collect(self):
         controls = {key: (widget.currentData() if key == 'longitudinal_method' else widget.currentText())
-                    if isinstance(widget, QComboBox) else widget.value() for key, widget in self.controls.items()}
+                    if isinstance(widget, QComboBox) else read_customary_spin(widget, FT_PER_M if key.endswith('_m') else 1)
+                    for key, widget in self.controls.items()}
         uncertainty = {key: controls.pop(key) for key in
                        ('before_sigma_m', 'after_sigma_m', 'temporal_correlation', 'spatial_correlation')}
         return controls, uncertainty
@@ -240,10 +253,11 @@ class CalculationAuditWindow(QMainWindow):
 
     @staticmethod
     def populate(table, frame):
+        frame = customary_frame(frame)
         visible = frame.head(2000)
         table.setRowCount(len(visible))
         table.setColumnCount(len(frame.columns))
-        table.setHorizontalHeaderLabels(list(frame.columns))
+        table.setHorizontalHeaderLabels([customary_header(column) for column in frame.columns])
         for i, values in enumerate(visible.itertuples(index=False, name=None)):
             for j, value in enumerate(values):
                 text = 'undefined' if pd.isna(value) else f'{value:.6g}' if isinstance(value, float) else str(value)
@@ -270,28 +284,39 @@ class CalculationAuditWindow(QMainWindow):
         self.populate(self.lateral_table, self.result.lateral_audit[self.result.lateral_audit.xs_id == xs])
         self.populate(self.reach_table, self.result.intervals)
         self.populate(self.section_table, self.result.sections)
-        row = self.result.sections.set_index('xs_id').loc[xs]
+        row = self.result.sections.set_index('xs_id').loc[xs].copy()
+        for key in row.index:
+            _, scale = customary_column(key)
+            if scale != 1:
+                row[key] *= scale
         self.calculation_text.setText(
-            f'XS {xs} • accepted width {row.effective_width_m:,.3f} m • control length {row.control_length_m:,.3f} m\n'
-            f'Model ΔA {row.model_area_change_m2:,.3f} m² × {row.control_length_m:,.3f} m = '
-            f'{row.model_local_control_volume_m3:,.3f} m³; '
-            f'observed ΔA {row.observed_area_change_m2:,.3f} m² × {row.control_length_m:,.3f} m = '
-            f'{row.observed_local_control_volume_m3:,.3f} m³.\n'
-            f'Observed node sum {row.observed_cumulative_m3:,.3f} m³; completed-reach prefix '
-            f'{row.observed_interval_prefix_m3:,.3f} m³ (segment {int(row.segment_id)}).')
+            f'XS {xs} • accepted width {row.effective_width_m:,.3f} ft • control length {row.control_length_m:,.3f} ft\n'
+            f'Model ΔA {row.model_area_change_m2:,.3f} ft² × {row.control_length_m:,.3f} ft / 27 = '
+            f'{row.model_local_control_volume_m3:,.3f} yd³; '
+            f'observed ΔA {row.observed_area_change_m2:,.3f} ft² × {row.control_length_m:,.3f} ft / 27 = '
+            f'{row.observed_local_control_volume_m3:,.3f} yd³.\n'
+            f'Observed node sum {row.observed_cumulative_m3:,.3f} yd³; completed-reach prefix '
+            f'{row.observed_interval_prefix_m3:,.3f} yd³ (segment {int(row.segment_id)}).')
 
     def describe(self, name, row=None):
-        m = self.result.metrics
-        text = (f'Displaying {name}. Model / observed net: {m["model_total_m3"]:,.1f} / {m["observed_total_m3"]:,.1f} m³; '
-                f'bias {m["total_bias_m3"]:,.1f} m³.\n'
+        m = {key: value*customary_column(key)[1] if value is not None and isinstance(value, (int, float)) else value
+             for key, value in self.result.metrics.items()}
+        if row is not None:
+            row = row.copy()
+            for key in row.index:
+                _, scale = customary_column(key)
+                if scale != 1 and pd.notna(row[key]):
+                    row[key] *= scale
+        text = (f'Displaying {name}. Model / observed net: {m["model_total_m3"]:,.1f} / {m["observed_total_m3"]:,.1f} yd³; '
+                f'bias {m["total_bias_m3"]:,.1f} yd³.\n'
                 f'Observed gross erosion / deposition: {m["observed_gross_erosion_m3"]:,.1f} / '
-                f'{m["observed_gross_deposition_m3"]:,.1f} m³; '
-                f'spatial change std {m["observed_spatial_std_change_m"]:.3f} m.\n')
+                f'{m["observed_gross_deposition_m3"]:,.1f} yd³; '
+                f'spatial change std {m["observed_spatial_std_change_m"]:.3f} ft.\n')
         if row is not None:
             if row.support_changed:
                 text += 'Footprint changed: total differences combine estimator effects and changed coverage.\n'
             if pd.notna(row.bias_lower_95_m3):
-                text += f'Conditional bias interval: [{row.bias_lower_95_m3:,.1f}, {row.bias_upper_95_m3:,.1f}] m³ (survey error only; model treated as exact).\n'
+                text += f'Conditional bias interval: [{row.bias_lower_95_m3:,.1f}, {row.bias_upper_95_m3:,.1f}] yd³ (survey error only; model treated as exact).\n'
             else:
                 text += 'No survey uncertainty supplied; statistical significance is undetermined.\n'
         text += 'Knobs describe the next experiment; uncertainty assumptions apply to all summary rows. Tables show up to 2,000 rows; exports contain all rows.'
