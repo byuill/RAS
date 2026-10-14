@@ -19,6 +19,12 @@ The previous script is preserved in `legacy/Generate_Discharge_BC_Ver3.py` for
 comparison; it retains the historical defects and should not generate new BCs.
 Importing the new launcher does not execute calculations or create files.
 
+The `create_BC` folder is self-contained once its Python dependencies are
+installed. You can copy the complete folder to a separate project directory and
+run `python Generate_Discharge_BC_Ver3.py` from inside it. Keep all the Python
+modules, including `qt_support.py`, and bundled CSV files together; copying only
+the launcher is insufficient. No separate top-level `gui` folder is required.
+
 ## Desktop workflow
 
 1. Select the continuous daily flow CSV and monthly MMR/Ohio split CSV. All

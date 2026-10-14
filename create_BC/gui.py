@@ -9,8 +9,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDateEdit, QFileDialog, QFo
     QSlider, QSpinBox, QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem,
     QTabWidget, QTextEdit, QVBoxLayout, QWidget, QHeaderView)
 
-from gui.mpl_canvas import MplCanvas
-from gui.workers import WorkerManager
+from .qt_support import MplCanvas, WorkerManager
 from .engine import calculate_budget
 from .export import dss_available, export_result
 from .parameters import Parameters
