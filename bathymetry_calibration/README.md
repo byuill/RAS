@@ -11,6 +11,19 @@ single-band raster files such as GeoTIFFs, or ArcGIS geodatabase rasters/points.
 Direct raster/CSV processing works without ArcGIS. File geodatabases use the
 configured, separately licensed ArcGIS interpreter.
 
+## Detailed user guide
+
+Download the [Word user guide](docs/Bathymetry_Calibration_User_Guide.docx) or
+read the [PDF version](docs/Bathymetry_Calibration_User_Guide.pdf). The 36-page
+guide includes 16 illustrations and covers the workflow, calculation methods,
+QA/QC, plot interpretation, sensitivity, conditional uncertainty, and preparation
+of a formal HEC-RAS technical review. Worked examples and example plots are
+clearly labeled as illustrative. Version 1.1 describes implementation `e435355`.
+The revised guide groups the material into six parts, clarifies the accounting
+and uncertainty assumptions, and improves diagram labels and layout. Editable
+manuscript and figure-generation sources, build instructions, and example
+verification are in [user_guide_source](docs/user_guide_source/README.md).
+
 ## Start and compare
 
 Use Python 3.12 in a separate virtual environment:

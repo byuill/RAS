@@ -1,0 +1,97 @@
+{
+  "guide_version": "1.1",
+  "review_date": "2026-10-12",
+  "tool_implementation_commit": "e43535537c5374700bb065aecd48eba98e2bbf0a",
+  "scope": "Guide examples and implementation descriptions; illustrative inputs only. Project data and model adequacy are outside this verification.",
+  "document_checks": {
+    "pages": 36,
+    "illustrations": 16,
+    "section_page_checks": 34,
+    "chapter_outline_checks": 6,
+    "contents_link_checks": 34,
+    "edge_issues": [],
+    "word_file_bytes": 3029684,
+    "pdf_file_bytes": 3683913
+  },
+  "engine_example_checks": {
+    "status": "PASS",
+    "engine": "bathymetry_calibration/core.py and calculation_audit.py",
+    "unit_basis": "Canonical SI inputs; international foot and cubic yard comparisons",
+    "opposing_lateral_change": {
+      "net_area_ft2": 0.0,
+      "deposition_area_ft2": 75.0,
+      "erosion_area_ft2": 75.0,
+      "gross_area_ft2": 150.0,
+      "lateral_std_ft": 1.7320508075688772,
+      "second_moment_ft3": 300.0,
+      "cancellation_fraction": 1.0,
+      "flat_cancellation": null
+    },
+    "endpoint_methods_yd3": {
+      "upstream": 1000.0,
+      "average_end_area": 2000.0000000000002,
+      "downstream": 3000.0000000000005
+    },
+    "disconnected_segments": {
+      "node_cumulative_yd3": [
+        500,
+        1000,
+        1000,
+        2000
+      ],
+      "completed_reach_prefix_yd3": [
+        0,
+        1000,
+        0,
+        2000
+      ],
+      "segment_totals_yd3": [
+        1000,
+        2000
+      ],
+      "all_supported_total_yd3": 3000,
+      "final_plotted_node_yd3": 2000,
+      "unsupported_xs": "C"
+    },
+    "conditional_uncertainty_and_shift": {
+      "spatial_correlation_0": {
+        "observed_volume_sigma_yd3": 1283.0005981991683,
+        "bias_lower_95_yd3": 485.3188275296304,
+        "bias_upper_95_yd3": 5514.68117247037,
+        "bias_exceeds_survey_error_95": true
+      },
+      "spatial_correlation_1": {
+        "observed_volume_sigma_yd3": 2095.131203515696,
+        "bias_lower_95_yd3": -1106.4571588907643,
+        "bias_upper_95_yd3": 7106.457158890765,
+        "bias_exceeds_survey_error_95": false
+      },
+      "sampled_bed_area_ft2": 200000.0,
+      "bias_yd3": 3000.0,
+      "uniform_target_shift_ft": 0.1,
+      "observed_shift_delta_yd3": 740.7407407407408,
+      "bias_shift_delta_yd3": -740.7407407407408,
+      "no_error_declared_significance": null,
+      "zero_change_error_significance": null
+    },
+    "preserved_source_knots": {
+      "source_knots_ft": [
+        0,
+        8,
+        10,
+        12,
+        20
+      ],
+      "coarse_added_spacing_ft": 5,
+      "fine_added_spacing_ft": 2,
+      "exact_area_ft2": 6.0,
+      "support_equal": true,
+      "coarse_profile_rows": 14,
+      "fine_profile_rows": 22
+    }
+  },
+  "sha256": {
+    "Bathymetry_Calibration_User_Guide.docx": "05ab625bb9882fd3b88c53de80b4621b5fa321e06c2f2785c804bd064a2d819c",
+    "Bathymetry_Calibration_User_Guide.pdf": "5f9ffb33cb9e642a343fbe766f02ad856594de5e7e2a1cdb16d223290b9278e4"
+  }
+}
