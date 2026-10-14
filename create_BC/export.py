@@ -1,5 +1,6 @@
 """Non-destructive exports with explicit boundary roles and DSS round-trip checks."""
 from datetime import datetime, timezone
+from html import escape
 import json
 from pathlib import Path
 import shutil
@@ -11,6 +12,9 @@ from matplotlib.figure import Figure
 
 from .engine import INFLOW_COLUMNS, EXTRACTION_COLUMNS
 from .plots import draw_hydrographs, draw_network
+from .budget_view import junction_budget
+from .ratings import draw_rating_curves, rating_notes
+from .schemes import RATING_CHOICES
 
 
 # Keep the historical B-parts so existing model links can be reviewed/reused.
@@ -113,7 +117,8 @@ def export_result(result, parent, *, scenario='Cal', include_dss=False, stage=No
         result.issues.to_csv(staging/'qaqc_issues.csv', index=False)
         result.parameters.save(staging/'parameters.json')
         report = dict(result.summary, scenario=scenario, dss_requested=include_dss,
-                      stage_supplied=stage is not None)
+                      stage_supplied=stage is not None, diagram_date=str(result.flows.date.iloc[index].date()))
+        junction_budget(result.flows.iloc[index]).to_csv(staging/'junction_budget.csv', index=False)
         mappings = []
         for col, name in DSS_NAMES.items():
             role = ('inflow' if col in INFLOW_COLUMNS else 'lateral extraction' if col in EXTRACTION_COLUMNS
@@ -125,7 +130,17 @@ def export_result(result, parent, *, scenario='Cal', include_dss=False, stage=No
         ron_cols = ['date', 'Red_River', 'ORCC_HydroP', 'overBank', 'ORCC_LowSill', 'ORCC_Auxil',
                     'Simmesport', 'TarbertLanding', 'Rising_ID']
         result.flows[ron_cols].to_excel(staging/'ForRon.xlsx', index=False, sheet_name='Daily flows')
-        draw_network(Figure(figsize=(15, 9)), result, index).savefig(staging/'river_budget.png', dpi=150)
+        draw_network(Figure(figsize=(16, 15)), result, index).savefig(staging/'river_budget.png', dpi=150)
+        draw_rating_curves(Figure(figsize=(13, 12)), result, index).savefig(staging/'pass_ratings.png', dpi=150)
+        explanations = ''.join(f'<section><h2>{escape(name)}</h2><p>{rating_notes(result, choice, index)}</p></section>'
+                               for choice, name in RATING_CHOICES)
+        (staging/'rating_notes.html').write_text(
+            '<!doctype html><html><head><meta charset="utf-8"><title>Outflow parameterization</title>'
+            '<style>body{font:16px/1.6 sans-serif;max-width:980px;margin:40px auto;padding:0 24px;}'
+            'section{border-top:1px solid #ccd6dc;margin-top:24px;}h1,h2{color:#173e58;}</style></head><body>'
+            f'<h1>Outflow ratings and operating rules</h1><p>Diagram day: {report["diagram_date"]}. '
+            'These explanations describe the saved parameter scenario and the supplied code relationships.</p>'
+            +explanations+'</body></html>', encoding='utf-8')
         draw_hydrographs(Figure(figsize=(12, 9)), result).savefig(staging/'hydrographs.png', dpi=150)
         if include_dss:
             report['dss_records'] = write_dss(result, staging/'boundary_conditions.dss', scenario, stage)

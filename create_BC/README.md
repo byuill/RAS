@@ -37,15 +37,64 @@ the launcher is insufficient. No separate top-level `gui` folder is required.
    calculations are stale. Save/load scenario JSON for repeatable runs.
 4. Select a date or move the slider. **River flow budget** shows all represented
    inflows, ORCC structures, diversions, distributaries, and three terminal passes.
-   Arrow widths scale with the square root of flow. The forcing/estimated-flow
-   gap is displayed at Union Point. **Hydrographs & residuals**, **Daily ledger**,
-   and **QA/QC & assumptions** provide the numerical audit.
+   Labels sit in separate cards outside the connector lanes. Use the diagram-view
+   selector for the full network, regional/ORCC, or lower-river detail; scroll to
+   inspect the figure at its readable minimum size. The forcing/estimated-flow
+   gap is displayed at Union Point. **Ratings & operating rules**, **Hydrographs
+   & residuals**, **Daily ledger**, and **QA/QC & assumptions** provide the audit.
 5. Export to a new run directory. DSS is optional and its values, timestamps,
    units, and record counts are checked by reading every record back. Existing
    calibration data, DSS files, and HEC-RAS model files are not overwritten.
 
 The application calculates and exports in a background worker. On a headless
 machine, use the CLI below; `QT_QPA_PLATFORM=offscreen` is for GUI testing only.
+
+### Junction percentages
+
+For a withdrawal, `out` is withdrawn flow divided by the mainstem flow arriving
+at that junction, and `stays` is the remaining fraction. For a tributary/return,
+`in` is that contribution divided by the merged flow after the confluence, and
+`main` is the share from the upstream mainstem. Percentages use those local
+references, not one gauge denominator for the entire river.
+
+The MMR/Ohio confluence uses their combined total. ORCC and Tarbert branches use
+Union Point; the four structure shares use total ORCC. ORCC/Red River contributions
+to Simmesport use their receiving-channel total. All three terminal fractions use
+Head of Passes. The actual Mississippi fraction of latitude flow is displayed
+separately because it has a different denominator from the Union Point split.
+At zero reference flow, share is undefined (`—`), not a fabricated zero percent.
+
+The **Junction percentages** subtab includes flow magnitudes, local reference
+flows, percentage bases, and mainstem flow after each applicable confluence or
+withdrawal. `All flow / audit fields` retains the original signed ledger. Use
+**Largest gap** to inspect the maximum upstream discrepancy, or the arrow buttons
+to move one day at a time. Recalculation preserves the inspected date when it is
+inside the new input range.
+
+### Ratings and operating rules
+
+The tab provides a seven-pass overview and individual plots for every pass,
+terminal fractions, controlled diversions, spillway allocation, Birds Point/
+New Madrid, and the ORCC total target. Individual pass views show both discharge
+and its percentage of local inflow. By default applied pass outflows are shown;
+enable **Show raw formulas** to inspect negative or over-available raw requests.
+Use **Auto range**, or set the maximum input flow explicitly. **Edit parameters**
+opens the relevant group and, for an individual pass, scrolls to its coefficient.
+
+Orange markers show the selected day's applied output at the correct local input.
+Grey bands mark the input span encountered at that location in the loaded run;
+they are not asserted calibration ranges. Explanations name each curve's input,
+formula, bounds, sequential role, and any inactive controls. ORCC ratio lines in
+prescribed-total mode are explicitly labeled inactive alternatives. New Madrid
+is shown as a delayed return kernel because today's return depends on earlier
+diversions, not just today's discharge. Terminal pieces are drawn separately at
+their switch so a discontinuity is visible rather than visually interpolated.
+
+All views use the last calculated scenario. Editing parameters disables export
+and displays a stale-results notice until **Calculate & check budget** is run.
+Greyed parameter controls are inactive in the selected workflow; their values
+remain in the saved scenario. Group introductions explain relationships visible
+in the original code without assigning undocumented physical interpretations.
 
 ## Inputs and interpretation
 
@@ -138,7 +187,11 @@ Each export includes:
   canonical input/split hashes and QA/QC summary in `report.json`.
 - `qaqc_issues.csv`, containing dated warnings and information.
 - `ForRon.xlsx`, retaining the historical sign convention for ORCC structures.
-- `river_budget.png`, `hydrographs.png`, and `boundary_roles.csv`.
+- `river_budget.png`, `hydrographs.png`, `pass_ratings.png`, and `boundary_roles.csv`.
+- `junction_budget.csv`, with percentages and explicit reference flows for the
+  selected diagram date, which is also recorded in `report.json`.
+- `rating_notes.html`, with formulas and operating-rule explanations for the
+  saved scenario. Open it in a browser alongside the exported plots.
 - Optional `boundary_conditions.dss`, with preserved historical B-parts plus
   explicit terminal/gauge diagnostics; DSS round-trip precision is reported.
 - Optional `stage_input.csv`, retaining the supplied aligned stage data.

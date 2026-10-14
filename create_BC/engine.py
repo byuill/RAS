@@ -12,6 +12,7 @@ import pandas as pd
 from scipy.signal import savgol_filter
 
 from .parameters import Parameters
+from .schemes import PASS_RATINGS, pass_outflow, spillway_outflows, terminal_fraction
 
 
 ORCC_COLUMNS = ['ORCC_HydroP', 'ORCC_LowSill', 'ORCC_Auxil', 'overBank']
@@ -234,10 +235,9 @@ def calculate_budget(data, split_table=None, parameters=None):
                           Rising_ID=state, head_constraint=head, MMR_fraction=fraction,
                           RandomFlux_A=a, RandomFlux_B=b, floodway_loss=loss,
                           floodway_storage_ft3=storage*86400))
+    morg, bc = spillway_outflows(tl, p)
     spill = np.maximum(tl-p.spill_threshold, 0)
-    bc = (np.minimum(spill, p.bc_limit) if p.spill_style == 'threshold' else
-          spill*np.where(spill < p.bc_switch, p.bc_low_share, p.bc_high_share))
-    f['Morganza'], f['BonnetCarre'] = -(spill-bc), -bc
+    f['Morganza'], f['BonnetCarre'] = -morg, -bc
     remaining = tl-spill
     for name, demand in [('Davis_Pond', p.davis), ('Caernarvon', p.caernarvon), ('Siphons', p.siphons)]:
         target = np.where(q >= p.diversion_trigger, demand, 0)
@@ -245,21 +245,14 @@ def calculate_budget(data, split_table=None, parameters=None):
         flag(amount < target-1e-6, 'diversion_limited', f'{name} limited by available mainstem water.')
         f[name] = -amount
         remaining -= amount
-    for name, a, b, logarithmic in [('MGP', p.mg_a, p.mg_b, True), ('PALH', p.palh_a, p.palh_b, True),
-        ('OstNep', p.ost_a, p.ost_b, False), ('FSP', p.fsp_a, p.fsp_b, False),
-        ('BapCol', p.bap_a, p.bap_b, False), ('GrandPass', p.gp_a, p.gp_b, False),
-        ('CubitsGapWB', p.cg_a, p.cg_b, False)]:
-        raw = a*(np.log(np.maximum(remaining, 1)) if logarithmic else remaining)-b
-        amount = np.clip(raw, 0, remaining)
-        flag(raw > remaining+1e-6, 'rating_limited', f'{name} rating exceeds available water; extraction capped.')
-        f[name] = -amount
+    for rating in PASS_RATINGS:
+        raw, amount = pass_outflow(remaining, rating, p)
+        flag(raw > remaining+1e-6, 'rating_limited', f'{rating.column} rating exceeds available water; extraction capped.')
+        f[rating.column] = -amount
         remaining -= amount
     f['HeadOfPasses'] = remaining
-    swp_fraction = np.where(remaining < p.swp_threshold,
-        p.swp_quad*remaining**2+p.swp_low_slope*remaining+p.swp_low_offset,
-        p.swp_high_slope*remaining+p.swp_high_offset)
-    flag((swp_fraction < 0) | (swp_fraction > 1), 'swp_fraction_limited', 'Southwest Pass fraction constrained to [0,1].')
-    swp_fraction = np.clip(swp_fraction, 0, 1)
+    raw_fraction, swp_fraction = terminal_fraction(remaining, p)
+    flag((raw_fraction < 0) | (raw_fraction > 1), 'swp_fraction_limited', 'Southwest Pass fraction constrained to [0,1].')
     f['SWP_Flow'] = -remaining*swp_fraction
     f['SouthPass'] = f['PassALoutre'] = -remaining*(1-swp_fraction)/2
     f['Terminal_Passes'] = f.SouthPass  # Legacy alias: EACH terminal pass, not their sum.
