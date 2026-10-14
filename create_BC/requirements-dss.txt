@@ -1,0 +1,2 @@
+# Optional HEC-DSS reader/writer. Regular CSV/Excel/GUI workflows do not need it.
+pydsstools==3.1.0
