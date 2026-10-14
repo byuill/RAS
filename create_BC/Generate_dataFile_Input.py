@@ -46,6 +46,7 @@ from datetime import datetime
 
 import requests
 import pandas as pd
+import numpy as np
 
 ## __________________________________________________________________________________________________
 ## 1. USER INPUTS
@@ -89,38 +90,58 @@ def fetch_cwms_timeseries(ts_id, start_date, end_date):
         "name": ts_id,
         "begin": f"{start_date:%Y-%m-%d}T00:00:00Z",
         "end": f"{end_date:%Y-%m-%d}T23:59:59Z",
-        "unit": CWMS_UNITS,
+        "unit": "EN",
         "page-size": 500000,
     }
     print(f"Downloading CWMS time series '{ts_id}' ({start_date:%Y-%m-%d} to {end_date:%Y-%m-%d})...")
-    resp = requests.get(
-        f"{CWMS_API_ROOT}/timeseries", params=params,
-        headers={"Accept": "application/json"}, timeout=REQUEST_TIMEOUT,
-    )
-    resp.raise_for_status()
-    payload = resp.json()
-
-    rows = [(v[0], v[1]) for v in payload.get('values', []) if v[1] is not None]
+    rows, page, seen = [], None, set()
+    for _ in range(200):
+        query = dict(params)
+        if page:
+            if page in seen:
+                raise RuntimeError('CWMS pagination loop; refusing partial results')
+            seen.add(page)
+            query['page'] = page
+        resp = requests.get(
+            f"{CWMS_API_ROOT}/timeseries", params=query,
+            headers={"Accept": "application/json;version=2"}, timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        if str(payload.get('units', '')).lower() not in {'cfs', 'ft3/s', 'ft^3/s'}:
+            raise RuntimeError(f"CWMS returned unexpected flow units: {payload.get('units')!r}")
+        rows.extend((v[0], v[1]) for v in payload.get('values', []) if v[1] is not None)
+        page = payload.get('next-page')
+        if not page:
+            break
+    else:
+        raise RuntimeError('CWMS pagination limit; refusing partial results')
     if not rows:
         raise RuntimeError(
             f"No CWMS data returned for time series '{ts_id}'. Verify the office, ID, and date range."
         )
 
     df = pd.DataFrame(rows, columns=['ts', 'value'])
+    if not np.isfinite(df['value']).all() or (df['value'] < 0).any():
+        raise RuntimeError(f'CWMS returned invalid/negative flow for {ts_id}')
     df['date'] = pd.to_datetime(df['ts'], unit='ms', utc=True).dt.tz_convert(None).dt.normalize()
     daily = df.groupby('date', as_index=False)['value'].mean()
-    
+
     # Reindex to full date range
     full_range = pd.date_range(start_date, end_date, freq='D')
     daily = daily.set_index('date').reindex(full_range).rename_axis('date').reset_index()
 
-    # Linearly interpolate short gaps (up to 7 days) if any exist in continuous series
+    # Fill only COMPLETE interior gaps <=7 days. A missing Overbank observation
+    # is unknown, not evidence the structure was closed. Long gaps remain missing.
+    missing = daily['value'].isna()
+    groups = missing.ne(missing.shift()).cumsum()
+    run_length = missing.groupby(groups).transform('sum')
     if 'Overbank' not in ts_id:
-        daily['value'] = daily['value'].interpolate(method='linear', limit=7)
-    else:
-        # Overbank structure is closed/0 flow when not operating
-        daily['value'] = daily['value'].fillna(0.0)
-        daily.loc[daily['value'].abs() < 1.0, 'value'] = 0.0
+        candidate = daily['value'].interpolate(method='linear', limit_area='inside')
+        fill = missing & run_length.le(7) & candidate.notna()
+        daily.loc[fill, 'value'] = candidate[fill]
+        if fill.any():
+            print(f'  Explicit interpolation: {int(fill.sum())} day(s) in interior gaps <=7 days.')
 
     print(f"  Retrieved and aligned {len(daily)} daily values.")
     return daily
@@ -135,7 +156,7 @@ def download_orcc_total(start_date, end_date):
         total = df if total is None else pd.merge(total, df, on='date', how='outer')
 
     structure_cols = [c for c in total.columns if c != 'date']
-    total['ORCC'] = total[structure_cols].sum(axis=1, min_count=1)
+    total['ORCC'] = total[structure_cols].sum(axis=1, min_count=len(structure_cols))
     return total[['date', 'ORCC']]
 
 
@@ -175,7 +196,8 @@ def main():
 
     missing = df[df[['Red_River_Ldg', 'ORCC', 'TOTALLAT']].isnull().any(axis=1)]
     if not missing.empty:
-        print(f"Warning: {len(missing)} date(s) have missing data from one or more CWMS sources.")
+        sys.exit(f"{len(missing)} date(s) have incomplete CWMS sources, including ORCC structures. "
+                 'Refusing to write an incomplete boundary input; review missing observations first.')
 
     # discharge = Union Point (pre-diversion) flow = post-diversion mainstem flow + diverted ORCC flow.
     df['discharge'] = df['Red_River_Ldg'] + df['ORCC']
@@ -184,9 +206,8 @@ def main():
 
     negative = df['Red_River'] < 0
     if negative.any():
-        print(f"Warning: {negative.sum()} date(s) had a negative computed Red_River value "
-              "(small inconsistencies between the CWMS DailyComputed series); clipped to 0.")
-        df.loc[negative, 'Red_River'] = 0.0
+        sys.exit(f'{int(negative.sum())} date(s) imply a negative Red River contribution. '
+                 'Review source/gauge definitions and measurement consistency; values were not clipped.')
 
     out = df[['date', 'discharge', 'Red_River', 'ORCC']].copy()
 
