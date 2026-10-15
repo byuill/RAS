@@ -1,5 +1,9 @@
 # Download Lower Mississippi eHydro survey packages
 
+After downloading, use [the bathymetry post-processing script](POSTPROCESSING.md)
+to extract packages, collect bathymetry in a geodatabase and create one GeoTIFF
+mosaic. It runs in ArcGIS Pro Python and reports progress in the terminal.
+
 `eHydro/download_ehydro.py` downloads the **All Data** packages linked by the
 public [USACE eHydro survey layer](https://services7.arcgis.com/n1YM8pTrFmm7L4hs/arcgis/rest/services/eHydro_Survey_Data/FeatureServer/0).
 It requires Python 3.10+ and `requests`; the desktop GUI also uses `PySide6`.
