@@ -299,7 +299,7 @@ class DownloadWindow(QMainWindow):
 
         def task(notify, cancelled):
             with self.session_factory() as session:
-                report = core.prepare_report(args, session, cancelled)
+                report = core.prepare_report(args, session, cancelled, notify)
                 notify(dict(kind='catalog', packages=core.package_inventory(report)))
                 core.inspect_packages(report, args.output, session, notify, cancelled)
                 return report
@@ -447,6 +447,10 @@ class DownloadWindow(QMainWindow):
 
     @Slot(object)
     def _progress(self, event):
+        if event['kind'] == 'report_warning':
+            self.log.appendPlainText('Report warning: '+event['message'])
+            self.status.setText('Report warning: '+event['message'])
+            return
         if event['kind'] == 'catalog':
             self._fill(event['packages'])
             return
@@ -504,6 +508,9 @@ class DownloadWindow(QMainWindow):
                 self.status.setText(f'{self.report["outcome"].replace("_", " ").capitalize()}: '
                                     f'{s["downloaded"]} downloaded, {s["skipped"]} already present, '
                                     f'{s["failed"]} failed, {s["unfinished"]} unfinished.')
+            if self.report.get('report_warnings'):
+                self.status.setText(self.status.text()+' Report saving needs attention: '
+                                    +', '.join(self.report['report_warnings'])+'. See Transfer log.')
         self.overall_progress.setRange(0, 1000)
         if operation in {'inventory', 'years'}:
             self.overall_progress.setValue(0)

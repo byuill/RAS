@@ -133,6 +133,10 @@ by Git. Outputs include:
   skipped, failed and unfinished counts. Unchecked packages are `not_selected`.
 - `manifest.csv`: a compact view of the current selection, with acquisition dates
   in UTC, coordinate-system metadata, package/PDF URLs, and download outcomes.
+- `manifest-recovery-*.json`: full progress snapshots created if Windows denies
+  replacement of `manifest.json`. The next run automatically loads the newest
+  valid saved report, including these snapshots. Keep them until the primary
+  manifest updates successfully.
 - `files/`: the original downloaded packages. Names include a URL hash to avoid
   collisions between identically named server files. Archives are not extracted;
   separate PDF plotsheets are listed in the manifest but not downloaded.
@@ -167,6 +171,38 @@ URLs during a download run; `2` no matching surveys (also used by argparse for
 invalid arguments). Failed packages do not stop other selected packages from
 being attempted. Review all failures and missing URLs before treating a run as
 complete. Keep the reports alongside the data for provenance.
+
+## Windows access-denied errors while saving reports
+
+`[WinError 5] Access is denied: ... .tmp -> ... manifest.json` means Windows
+denied replacing the report file. The script already closes its temporary writer
+before renaming it. Another process holding the file open, a brief security or
+sync scan, or file permissions can still prevent replacement; the error alone
+does not identify which process caused it.
+
+Atomic file replacement now retries Windows access/sharing errors a bounded
+number of times. If the primary JSON manifest remains locked, the job saves a
+uniquely named recovery snapshot and continues downloading. CSV exports are
+written atomically too, so a report held open in Excel is preserved and reported
+as a warning rather than truncating the CSV or aborting all remaining transfers.
+The GUI shows report warnings in the Transfer log and final status. If both the
+primary manifest and its recovery snapshots cannot be written, it explicitly
+reports that central reports may be stale; completed-file receipts still support
+restart recovery. Headless mode returns exit code `1` for unresolved report
+warnings even when the selected package transfers succeeded.
+
+Close any application using the JSON/CSV reports while downloading and check
+that the destination is writable. Update the scripts, then rerun using the same
+destination; completed archives are checked and skipped. Preserve the `files/`
+folder, receipts and recovery snapshots. The script does not change permissions
+or remove a locked destination file to force an overwrite. A genuinely unwritable
+data folder or a full disk still requires fixing the underlying storage problem.
+
+Regression tests simulate Windows errors 5, 32 and 33, including a lock appearing
+mid-download, a permanently locked CSV, recovery from a newer snapshot than the
+primary manifest, and restart skips. They also verify that disk-full errors are
+not treated as harmless file locks. These checks run with simulated Windows
+errors; validation on the affected Windows drive remains a local check.
 
 ## Coverage and cloud access
 

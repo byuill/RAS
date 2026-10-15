@@ -19,6 +19,7 @@ import re
 import sys
 import tempfile
 import time
+import uuid
 from urllib.parse import unquote, urlsplit
 
 import requests
@@ -29,6 +30,7 @@ from urllib3.util.retry import Retry
 LAYER = ('https://services7.arcgis.com/n1YM8pTrFmm7L4hs/arcgis/rest/services/'
          'eHydro_Survey_Data/FeatureServer/0')
 TOOL = 'ras-ehydro-downloader'
+REPLACE_RETRY_DELAYS = (.05, .1, .2, .4)
 
 
 class DownloadCancelled(RuntimeError):
@@ -248,11 +250,38 @@ def download_package(session, url, directory, previous=None, progress=None, canc
             # Write the receipt BEFORE promoting the file: a hard stop between promotion
             # and the main manifest update can then recover without a second transfer.
             atomic_json(path.with_name(path.name+'.download.json'), dict(tool=TOOL, url=url, result=result))
-            os.replace(temporary, path)
+            replace_file(temporary, path)
             return result
     finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+        remove_temporary(temporary)
+
+
+def is_access_error(error):
+    return isinstance(error, PermissionError) or getattr(error, 'winerror', None) in {5, 32, 33}
+
+
+def replace_file(source, destination):
+    """Retry brief Windows sharing/access locks without deleting the destination."""
+    for attempt in range(len(REPLACE_RETRY_DELAYS)+1):
+        try:
+            os.replace(source, destination)
+            return
+        except OSError as exc:
+            if not is_access_error(exc) or attempt == len(REPLACE_RETRY_DELAYS):
+                raise
+            delay = REPLACE_RETRY_DELAYS[attempt]
+            if delay:
+                time.sleep(delay)
+
+
+def remove_temporary(path):
+    if path is not None:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            # A scanner may still hold the temporary file. Do not mask the
+            # original write/replace error with a cleanup error.
+            pass
 
 
 def atomic_json(path, value):
@@ -263,10 +292,23 @@ def atomic_json(path, value):
             temporary = Path(target.name)
             json.dump(value, target, indent=2, ensure_ascii=False)
             target.write('\n')
-        os.replace(temporary, path)
+        replace_file(temporary, path)
     finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+        remove_temporary(temporary)
+
+
+def atomic_csv(path, columns, rows):
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', newline='', dir=path.parent,
+                                         suffix='.tmp', delete=False) as target:
+            temporary = Path(target.name)
+            writer = csv.writer(target)
+            writer.writerow(columns)
+            writer.writerows(rows)
+        replace_file(temporary, path)
+    finally:
+        remove_temporary(temporary)
 
 
 def iso_date(value):
@@ -275,27 +317,90 @@ def iso_date(value):
     return datetime.fromtimestamp(value/1000, timezone.utc).isoformat()
 
 
-def save_report(output, report):
-    atomic_json(output/'manifest.json', report)
+def report_warning(report, name, message, notify=None):
+    warnings = report.setdefault('report_warnings', {})
+    changed = warnings.get(name) != message
+    warnings[name] = message
+    if changed:
+        if notify:
+            notify(dict(kind='report_warning', artifact=name, message=message))
+        else:
+            print('Report warning: '+message, file=sys.stderr)
+
+
+def access_warning(name):
+    return (f'{name} could not be replaced after retries (access denied or file locked). '
+            'Close applications using this report and check its file permissions.')
+
+
+def save_report(output, report, notify=None):
+    """Keep central report locks from aborting receipt-protected downloads."""
+    warnings = report.setdefault('report_warnings', {})
+    report['saved_at_utc'] = datetime.now(timezone.utc).isoformat()
     columns = ['surveyjobidpk', 'channel_id', 'usacedistrictcode', 'surveydatestart',
                'surveydateend', 'sdsfeaturename', 'sourceprojection', 'sourcedatalocation',
                'sourcedatacontent', 'plotsheetlocation', 'size_bytes', 'status', 'file', 'bytes', 'sha256', 'error']
-    with (output/'manifest.csv').open('w', newline='', encoding='utf-8') as target:
-        writer = csv.DictWriter(target, fieldnames=columns)
-        writer.writeheader()
-        for survey in report['surveys']:
-            row = {**survey, 'size_bytes': report.get('package_info', {}).get(survey.get('sourcedatalocation'), {}).get('size_bytes')}
-            writer.writerow({key: row.get(key) for key in columns})
+    rows = [{**survey, 'size_bytes': report.get('package_info', {}).get(survey.get('sourcedatalocation'), {}).get('size_bytes')}
+            for survey in report['surveys']]
+    try:
+        atomic_csv(output/'manifest.csv', columns, ([row.get(key) for key in columns] for row in rows))
+        warnings.pop('manifest.csv', None)
+    except OSError as exc:
+        if not is_access_error(exc):
+            raise
+        report_warning(report, 'manifest.csv', access_warning('manifest.csv')+' The previous CSV is preserved; downloads can continue.', notify)
+    warnings.pop('manifest.json', None)
+    report.pop('recovery_manifest', None)
+    try:
+        atomic_json(output/'manifest.json', report)
+    except OSError as exc:
+        if not is_access_error(exc):
+            raise
+        recovery = output/f'manifest-recovery-{uuid.uuid4().hex}.json'
+        report['recovery_manifest'] = recovery.name
+        report_warning(report, 'manifest.json', access_warning('manifest.json')+
+                       ' Progress is being saved in recovery snapshots; downloads can continue.', notify)
+        try:
+            atomic_json(recovery, report)
+        except OSError as fallback_error:
+            if not is_access_error(fallback_error):
+                raise
+            report.pop('recovery_manifest', None)
+            report_warning(report, 'manifest.json', access_warning('manifest.json')+
+                           ' The recovery snapshot also could not be saved. Completed-file receipts remain available; '
+                           'central reports may be out of date.', notify)
 
 
-def prepare_report(args, session, cancelled=None):
+def load_previous_report(output):
+    """Prefer the newest valid recovery snapshot if a locked main file is stale."""
+    previous, newest = {}, float('-inf')
+    primary = output/'manifest.json'
+    paths = ([primary] if primary.exists() else []) + list(output.glob('manifest-recovery-*.json'))
+    for path in paths:
+        try:
+            saved = json.loads(path.read_text(encoding='utf-8'))
+            if (not isinstance(saved, dict) or saved.get('tool') != TOOL or saved.get('format_version') != 1
+                    or not isinstance(saved.get('downloads'), dict) or not isinstance(saved.get('surveys'), list)):
+                if path == primary:
+                    raise RuntimeError('An unrelated manifest.json already exists in the output directory; preserving it.')
+                continue
+            stamp = saved.get('saved_at_utc')
+            modified = datetime.fromisoformat(stamp).timestamp() if stamp is not None else path.stat().st_mtime
+            if modified > newest:
+                previous, newest = saved, modified
+        except (ValueError, TypeError, OSError):
+            if path == primary:
+                raise
+            # Incomplete, foreign, or unreadable recovery files are not evidence
+            # of completed downloads. Other snapshots and receipts still apply.
+            continue
+    return previous
+
+
+def prepare_report(args, session, cancelled=None, notify=None):
     output = args.output.expanduser().resolve()
-    previous = {}
-    if (output/'manifest.json').exists():
-        previous = json.loads((output/'manifest.json').read_text(encoding='utf-8'))
-        if previous.get('tool') != TOOL or previous.get('format_version') != 1:
-            raise RuntimeError('An unrelated manifest.json already exists in the output directory; preserving it.')
-    elif any((output/name).exists() for name in ['manifest.csv', 'channels.csv']):
+    previous = load_previous_report(output)
+    if not previous and any((output/name).exists() for name in ['manifest.csv', 'channels.csv']):
         # Receipts also establish that these reports belong to an earlier run,
         # allowing recovery if the main manifest was lost after files completed.
         owned = False
@@ -315,14 +420,6 @@ def prepare_report(args, session, cancelled=None):
     counts = Counter(str(record.get(args.channel_field.lower()) or '(missing)') for record in candidates)
     selected = [record for record in candidates if matches_channel(record, patterns, args.channel_field)]
     output.mkdir(parents=True, exist_ok=True)
-    with (output/'channels.csv').open('w', newline='', encoding='utf-8') as target:
-        writer = csv.writer(target)
-        writer.writerow(['channel_id', 'survey_count', 'matches_patterns'])
-        for channel, count in sorted(counts.items()):
-            matched = matches_channel({args.channel_field.lower(): channel}, patterns, args.channel_field)
-            writer.writerow([channel, count, matched])
-            if args.list_channels:
-                print(f'{channel}: {count} surveys' + (' [matched]' if matched else ''))
     report = dict(tool=TOOL, format_version=1, checked_at_utc=datetime.now(timezone.utc).isoformat(),
                   layer=args.layer, year=args.year, districts=args.districts, where=where,
                   date_selection='survey start >= January 1 and < January 1 of the following year (UTC)',
@@ -337,7 +434,21 @@ def prepare_report(args, session, cancelled=None):
         record['sourcedatalocation'] = str(record.get('sourcedatalocation') or '').strip()
         record['status'] = ('catalog_only' if report['catalog_only'] else 'pending') if record['sourcedatalocation'] else 'missing_url'
         report['surveys'].append(record)
-    save_report(output, report)
+    # Establish the JSON ownership marker before writing optional CSV exports.
+    save_report(output, report, notify)
+    rows = []
+    for channel, count in sorted(counts.items()):
+        matched = matches_channel({args.channel_field.lower(): channel}, patterns, args.channel_field)
+        rows.append([channel, count, matched])
+        if args.list_channels:
+            print(f'{channel}: {count} surveys' + (' [matched]' if matched else ''))
+    try:
+        atomic_csv(output/'channels.csv', ['channel_id', 'survey_count', 'matches_patterns'], rows)
+    except OSError as exc:
+        if not is_access_error(exc):
+            raise
+        report_warning(report, 'channels.csv', access_warning('channels.csv')+' File discovery can continue.', notify)
+        save_report(output, report, notify)
     return report
 
 
@@ -386,7 +497,7 @@ def inspect_packages(report, output, session, notify=None, cancelled=None):
             result['inspection_error'] = str(exc)
             result['local_status'] = 'needs_review' if (output/'files'/package_name(url)).exists() else 'size_unknown'
         info[url] = result
-    save_report(output, report)
+    save_report(output, report, notify)
     return package_inventory(report)
 
 
@@ -409,7 +520,7 @@ def download_selection(report, urls, output, session, notify=None, cancelled=Non
     meter = TransferMeter(sizes)
     completed = skipped = failures = 0
     was_cancelled = False
-    save_report(output, report)
+    save_report(output, report, notify)
     for number, url in enumerate(urls, 1):
         def progress(received, total, phase):
             event = meter.update(url, received, total, phase)
@@ -436,7 +547,7 @@ def download_selection(report, urls, output, session, notify=None, cancelled=Non
                 for field in ['error', 'file', 'bytes', 'sha256', 'content_type']:
                     record.pop(field, None)
                 record.update(result)
-        save_report(output, report)
+        save_report(output, report, notify)
         event = meter.finish(url, result)
         if notify:
             notify({**event, 'index': number, 'count': len(urls), 'result': result})
@@ -445,7 +556,7 @@ def download_selection(report, urls, output, session, notify=None, cancelled=Non
     report['outcome'] = 'cancelled' if was_cancelled else 'completed_with_errors' if failures else 'completed'
     report['summary'] = dict(downloaded=completed, skipped=skipped, failed=failures, cancelled=was_cancelled,
                              selected=len(urls), unfinished=len(urls)-completed-skipped-failures)
-    save_report(output, report)
+    save_report(output, report, notify)
     return report
 
 
@@ -460,7 +571,7 @@ def run(args, session):
         print(f'{available["missing_urls"]} matching surveys lack package links; '
               f'{available["missing_dates"]} linked surveys lack usable acquisition dates.')
         return 0 if available['years'] else 2
-    report = prepare_report(args, session)
+    report = prepare_report(args, session, notify=console_progress)
     output = args.output.expanduser().resolve()
     print(f'{report["candidate_count"]} district/year surveys; {report["matched_count"]} match the channel patterns.')
     packages = package_inventory(report)
@@ -477,7 +588,7 @@ def run(args, session):
     missing = sum(not package['url'] for package in packages)
     if report['catalog_only']:
         print(f'Catalog only; no package files downloaded. Reports: {output}')
-        return 0
+        return 1 if report.get('report_warnings') else 0
     inspected = inspect_packages(report, output, session, notify=console_progress)
     pending = [p for p in inspected if p['url'] and p.get('local_status') != 'verified_existing']
     size = sum(p.get('size_bytes') or 0 for p in pending)
@@ -492,7 +603,7 @@ def run(args, session):
     report = download_selection(report, [p['url'] for p in packages if p['url']], output, session,
                                 notify=console_progress)
     print(f'Finished: {report["summary"]}; {missing} missing URLs. Reports: {output}')
-    return 1 if missing or report['summary']['failed'] else 0
+    return 1 if missing or report['summary']['failed'] or report.get('report_warnings') else 0
 
 
 def console_progress(event):
@@ -500,7 +611,9 @@ def console_progress(event):
         from .transfer_progress import format_duration, format_size
     except ImportError:
         from transfer_progress import format_duration, format_size
-    if event['kind'] == 'inventory':
+    if event['kind'] == 'report_warning':
+        print('Report warning: '+event['message'], file=sys.stderr, flush=True)
+    elif event['kind'] == 'inventory':
         if event['index'] == 1 or event['index'] % 25 == 0 or event['index'] == event['count']:
             print(f'Checking sizes/local files: {event["index"]}/{event["count"]}', file=sys.stderr)
     elif event['kind'] == 'result':
