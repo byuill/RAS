@@ -18,6 +18,7 @@ from .budget_view import junction_budget, percent_text
 from .explanations import GROUP_GUIDES, PARAMETER_NOTES
 from .ratings import draw_rating_curves, rating_notes, rating_group, rating_range
 from .schemes import PASS_RATINGS, RATING_CHOICES
+from .limb_delineation import draw_limb_delineation, synthetic_limb_delineation
 
 
 CHOICES = {
@@ -235,6 +236,30 @@ class BoundaryWindow(QMainWindow):
         ratings_split.addWidget(self.rating_explanation)
         ratings_split.setSizes([520, 180])
         ratings_layout.addWidget(ratings_split)
+        limb_tab = QWidget()
+        limb_layout = QVBoxLayout(limb_tab)
+        limb_layout.setContentsMargins(0, 0, 0, 0)
+        limb_controls = QHBoxLayout()
+        self.limb_update_button = QPushButton('Update plot')
+        self.limb_update_button.setToolTip('Read the current scenario parameters and redraw the synthetic example; no budget calculation is needed.')
+        self.limb_update_button.clicked.connect(self._update_limb_plot)
+        edit_limb = QPushButton('Edit hydrograph parameters')
+        edit_limb.clicked.connect(lambda: self.group_combo.setCurrentText('Hydrograph state'))
+        limb_controls.addWidget(self.limb_update_button)
+        limb_controls.addWidget(edit_limb)
+        limb_controls.addStretch()
+        limb_layout.addLayout(limb_controls)
+        self.limb_status = QLabel()
+        self.limb_status.setWordWrap(True)
+        self.limb_status.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        limb_layout.addWidget(self.limb_status)
+        self.limb_plot = MplCanvas(width=12, height=9)
+        # Keep annotations readable on smaller windows; scroll instead of shrinking text.
+        self.limb_plot.setMinimumSize(1200, 940)
+        limb_scroll = QScrollArea()
+        limb_scroll.setWidgetResizable(True)
+        limb_scroll.setWidget(self.limb_plot)
+        limb_layout.addWidget(limb_scroll)
         self.ledger = QTableWidget(0, 3)
         self.ledger.setHorizontalHeaderLabels(['Flow / ledger entry', 'Value', 'Units'])
         self.ledger.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
@@ -253,6 +278,7 @@ class BoundaryWindow(QMainWindow):
         self.tabs.addTab(network_tab, 'River flow budget')
         self.tabs.addTab(ratings_tab, 'Ratings & operating rules')
         self.tabs.addTab(self.hydrographs, 'Hydrographs & residuals')
+        self.tabs.addTab(limb_tab, 'Limb delineation')
         self.tabs.addTab(ledger_tabs, 'Daily ledger')
         self.tabs.addTab(self.qaqc, 'QA/QC & assumptions')
         review.addWidget(self.tabs, 1)
@@ -283,6 +309,12 @@ class BoundaryWindow(QMainWindow):
             (editor.toggled if isinstance(editor, QCheckBox) else editor.currentIndexChanged).connect(self._refresh_applicability)
         self.set_parameters(parameters or Parameters())
         self._loading = False
+        self._update_limb_plot()
+        for editor in self.editors.values():
+            signal = (editor.toggled if isinstance(editor, QCheckBox) else
+                      editor.currentIndexChanged if isinstance(editor, QComboBox) else
+                      editor.valueChanged if isinstance(editor, QSpinBox) else editor.textChanged)
+            signal.connect(self._mark_limb_dirty)
         # Draw selected-day network only after slider dragging pauses.
         self.day_timer = QTimer(self)
         self.day_timer.setSingleShot(True)
@@ -341,6 +373,24 @@ class BoundaryWindow(QMainWindow):
             (self.base/'ohio_split_wyV2.csv').resolve(), (self.base/'ohio_split_cy.csv').resolve()}:
             self.split_edit.setText(str(self.base/('ohio_split_wyV2.csv' if p.water_year else 'ohio_split_cy.csv')))
         self._mark_dirty()
+        self._mark_limb_dirty()
+
+    def _mark_limb_dirty(self, *args):
+        if not self._loading:
+            self.limb_status.setText('Scenario parameters changed. The illustration shows the previous settings; click Update plot to apply your edits.')
+
+    def _update_limb_plot(self):
+        try:
+            p = self.parameters()
+            data = synthetic_limb_delineation(p)
+        except ValueError as exc:
+            self.limb_status.setText(f'Plot unchanged: {exc}. Correct the scenario parameters and click Update plot.')
+            return
+        draw_limb_delineation(self.limb_plot.figure, p, data)
+        self.limb_data = data
+        self.limb_plot.draw_idle()
+        self.limb_status.setText('Showing current scenario parameters on a synthetic annual hydrograph. '
+                                 'Spring high water and fall low water are illustrative; input CSV files and calculated boundaries are unchanged.')
 
     def _mark_dirty(self, *args):
         if self._loading:
