@@ -49,6 +49,28 @@ the launcher is insufficient. No separate top-level `gui` folder is required.
 The application calculates and exports in a background worker. On a headless
 machine, use the CLI below; `QT_QPA_PLATFORM=offscreen` is for GUI testing only.
 
+### Limb delineation
+
+The **Limb delineation** tab illustrates the current hydrograph-state rules on a
+fixed synthetic daily Lower Mississippi hydrograph: winter pulses, sustained
+spring high water, a summer recession, and a fall low-water period. It is an
+illustration, not observed data or a forecast. Shading and a matching state strip
+identify normal, rising, crest, falling, and low-water days. Separate annotation
+cards show the rule thresholds and classified day counts without obscuring the
+hydrograph. The plot scrolls on smaller windows to keep the annotations readable.
+
+Edit **Scenario parameters → Hydrograph state**, then click **Update plot** in
+the tab to apply the edits without recalculating boundaries. The same engine
+classifier is used, including flood memory, the preceding rise-window and six-day
+means, and the crest continuation counter. Changing thresholds does not reshape
+the synthetic forcing to manufacture a particular state; some settings can
+produce zero days of a state. The reference gauge and input smoothing also apply
+to the illustration. A preceding synthetic year supplies trailing history.
+If supplied-state mode is selected, the tab still illustrates the automatic
+rules and explains that actual runs instead use the CSV state column. The
+head-constraint proxy is displayed separately when enabled. This tab does not
+modify input files, the current budget result, or exported boundaries.
+
 ### Junction percentages
 
 For a withdrawal, `out` is withdrawn flow divided by the mainstem flow arriving
