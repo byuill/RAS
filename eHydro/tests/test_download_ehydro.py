@@ -21,6 +21,9 @@ class Response:
     def raise_for_status(self):
         pass
 
+    def close(self):
+        pass
+
     def json(self):
         return self.payload
 
@@ -50,6 +53,18 @@ class Session:
         self.packages = packages or {URL: Response()}
         self.calls = []
         self.truncate, self.omit = truncate, omit
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+    def head(self, url, **kwargs):
+        package = self.packages[url]
+        if isinstance(package, Exception):
+            raise package
+        return Response(headers={'Content-Length': str(sum(len(c) for c in package.chunks if isinstance(c, bytes)))})
 
     def get(self, url, **kwargs):
         self.calls.append((url, kwargs))
@@ -149,7 +164,8 @@ def test_missing_urls_and_transfer_errors_are_reported_while_other_files_complet
     assert ehydro.run(args(tmp_path), session) == 1
     report = json.loads((tmp_path/'manifest.json').read_text())
     assert [record['status'] for record in report['surveys']] == ['downloaded', 'failed', 'missing_url']
-    assert len(list((tmp_path/'files').iterdir())) == 1
+    assert len(list((tmp_path/'files').glob('*.zip'))) == 1
+    assert len(list((tmp_path/'files').glob('*.download.json'))) == 1
     assert '503 Service unavailable' in (tmp_path/'manifest.csv').read_text()
 
 
