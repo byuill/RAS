@@ -1,6 +1,8 @@
 """API batching, literal channel prefixes, transfer failures, and repeatable downloads."""
 import json
+from datetime import datetime, timezone
 from pathlib import Path
+import re
 
 import pytest
 import requests
@@ -52,6 +54,7 @@ class Session:
         self.records = {record['OBJECTID']: record for record in records}
         self.packages = packages or {URL: Response()}
         self.calls = []
+        self.head_calls = []
         self.truncate, self.omit = truncate, omit
 
     def __enter__(self):
@@ -61,6 +64,7 @@ class Session:
         pass
 
     def head(self, url, **kwargs):
+        self.head_calls.append(url)
         package = self.packages[url]
         if isinstance(package, Exception):
             raise package
@@ -75,7 +79,16 @@ class Session:
         if url == LAYER+'/query':
             params = kwargs['params']
             if params.get('returnIdsOnly'):
-                return Response(dict(objectIds=list(self.records), objectIdFieldName='OBJECTID'))
+                ids = list(self.records)
+                symbols = re.findall(r"'(CE[A-Z]{3})'", params.get('where', ''))
+                if symbols:
+                    ids = [oid for oid in ids if self.records[oid]['usacedistrictcode'] in symbols]
+                bounds = re.findall(r"TIMESTAMP '(\d+)-01-01", params.get('where', ''))
+                if bounds:
+                    start, end = [datetime(int(year), 1, 1, tzinfo=timezone.utc).timestamp()*1000 for year in bounds]
+                    ids = [oid for oid in ids if isinstance(self.records[oid].get('surveydatestart'), (int, float))
+                           and start <= self.records[oid]['surveydatestart'] < end]
+                return Response(dict(objectIds=ids, objectIdFieldName='OBJECTID'))
             ids = list(map(int, params['objectIds'].split(',')))
             if self.truncate and len(ids) > 1:
                 return Response(dict(features=[], exceededTransferLimit=True))

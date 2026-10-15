@@ -20,6 +20,15 @@ def wait(qapp, condition, seconds=10):
     pytest.fail('GUI operation did not finish')
 
 
+def choose_year(qapp, window, year=2025):
+    window.refresh_years()
+    wait(qapp, lambda: window.worker is None and window.available_years is not None)
+    index = window.year.findData(year)
+    assert index >= 0
+    window.year.setCurrentIndex(index)
+    wait(qapp, lambda: window.worker is None and window.report is not None)
+
+
 def test_gui_reports_contents_checks_all_and_only_transfers_checked_files(qapp, tmp_path):
     other = 'https://data.example.test/other.zip'
     records = [dict(survey(1), sourcedatacontent='first.xyz,metadata.xml'), survey(2, url=other), survey(3, url=None)]
@@ -27,8 +36,7 @@ def test_gui_reports_contents_checks_all_and_only_transfers_checked_files(qapp, 
     window = DownloadWindow(args(tmp_path), session_factory=lambda: session, auto_discover=False)
     try:
         window.show()
-        window.find_button.click()
-        wait(qapp, lambda: window.worker is None)
+        choose_year(qapp, window)
         assert window.table.rowCount() == 3 and len(window.selected_urls()) == 2
         assert not any(url == URL or url == other for url, _ in session.calls)
         window.table.selectRow(0)
@@ -77,8 +85,7 @@ def test_gui_shows_byte_progress_and_cancel_restart_skips_completed_packages(qap
     window = DownloadWindow(args(tmp_path), session_factory=lambda: session, auto_discover=False)
     try:
         window.show()
-        window.discover()
-        wait(qapp, lambda: window.worker is None)
+        choose_year(qapp, window)
         window.download_button.click()
         wait(qapp, gated.started.is_set)
         wait(qapp, lambda: 0 < window.file_progress.value() < 1000)
@@ -114,8 +121,7 @@ def test_closing_active_window_cancels_then_waits_for_worker(qapp, tmp_path):
     window = DownloadWindow(args(tmp_path), session_factory=lambda: session, auto_discover=False)
     window.show()
     try:
-        window.discover()
-        wait(qapp, lambda: window.worker is None)
+        choose_year(qapp, window)
         window.download_button.click()
         wait(qapp, gated.started.is_set)
         window.close()

@@ -287,10 +287,11 @@ an active ArcPy/file read must finish before the operation can close safely.
 
 ## Known-answer validation and local limits
 
-To inventory and download Lower Mississippi eHydro survey packages for MVK/MVM
-in 2025, see the [bulk downloader instructions](eHydro/README.md).
+To inventory and download Lower Mississippi eHydro survey packages for MVK/MVM,
+see the [bulk downloader instructions](eHydro/README.md).
 Run `python eHydro/download_ehydro.py` for a desktop file-selection GUI with
-size/time estimates, progress and ETA, and verified skips of completed downloads.
+live year availability, size/time estimates, progress and ETA, and verified skips
+of completed downloads. Use `--list-years` to report available years in a terminal.
 Start with `python eHydro/download_ehydro.py --list-channels` to confirm channel
 IDs and package links before downloading archives.
 

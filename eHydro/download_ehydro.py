@@ -1,4 +1,4 @@
-"""Download eHydro survey data packages; defaults to MVK/MVM Lower Mississippi, 2025.
+"""Download eHydro packages; GUI discovers years, headless defaults to MVK/MVM, 2025.
 
 Run from any directory with Python 3.10+ and requests installed. See
 eHydro/README.md for selection semantics, examples, and output details.
@@ -62,6 +62,7 @@ def api_json(session, url, **params):
 
 def discover_surveys(session, layer, districts, year, channel_field, cancelled=None):
     """Fetch all candidate IDs, then attributes in batches, avoiding page truncation."""
+    check_cancel(cancelled)
     schema = api_json(session, layer)
     fields = {field['name'].lower(): field['name'] for field in schema['fields']}
     for required in ['usacedistrictcode', 'surveydatestart', 'sourcedatalocation', channel_field.lower()]:
@@ -72,9 +73,11 @@ def discover_surveys(session, layer, districts, year, channel_field, cancelled=N
     # eHydro stores the full USACE symbol (CEMVK), not the short district code (MVK).
     symbols = [code if len(code) == 5 else 'CE'+code for code in districts]
     codes = ', '.join("'" + code + "'" for code in symbols)
-    where = (f"{district_field} IN ({codes}) AND "
-             f"{date_field} >= TIMESTAMP '{year}-01-01 00:00:00' AND "
-             f"{date_field} < TIMESTAMP '{year+1}-01-01 00:00:00'")
+    where = f'{district_field} IN ({codes})'
+    if year is not None:
+        where += (f" AND {date_field} >= TIMESTAMP '{year}-01-01 00:00:00' AND "
+                  f"{date_field} < TIMESTAMP '{year+1}-01-01 00:00:00'")
+    check_cancel(cancelled)
     selection = api_json(session, layer+'/query', where=where, returnIdsOnly='true')
     if 'objectIds' not in selection:
         raise RuntimeError('ArcGIS did not return objectIds; refusing to treat this as an empty selection.')
@@ -83,7 +86,9 @@ def discover_surveys(session, layer, districts, year, channel_field, cancelled=N
     if not oid_field:
         raise RuntimeError('Survey layer has no object ID field.')
     oid_field = oid_field.lower()
-    size = max(1, min(500, int(schema.get('maxRecordCount', 500))))
+    # Keep GET URLs below common proxy/server length limits as well as the
+    # ArcGIS record limit; 500 encoded object IDs can otherwise return HTTP 404.
+    size = max(1, min(100, int(schema.get('maxRecordCount', 100))))
 
     def fetch_batch(batch):
         check_cancel(cancelled)
@@ -112,6 +117,48 @@ def discover_surveys(session, layer, districts, year, channel_field, cancelled=N
 def matches_channel(record, patterns, field='channelareaidfk'):
     value = str(record.get(field.lower()) or '').strip().upper()
     return bool(value) and any(fnmatchcase(value, pattern.upper()) for pattern in patterns)
+
+
+def discover_available_years(session, layer, districts, patterns, channel_field='channelareaidfk', cancelled=None):
+    """Find actual acquisition years for matching channels with data-package links.
+
+    Fetch the complete district index in checked batches rather than extrapolating
+    a continuous year range from the earliest/latest date. No archives or size
+    probes are needed until the user chooses a year.
+    """
+    records, where = discover_surveys(session, layer.rstrip('/'), districts, None, channel_field, cancelled)
+    years = {}
+    missing_dates = missing_urls = matched = 0
+    for record in records:
+        check_cancel(cancelled)
+        if not matches_channel(record, patterns, channel_field):
+            continue
+        matched += 1
+        url = str(record.get('sourcedatalocation') or '').strip()
+        if not url:
+            missing_urls += 1
+            continue
+        value = record.get('surveydatestart')
+        try:
+            if value is None or isinstance(value, bool):
+                raise ValueError('Missing survey acquisition start date')
+            if isinstance(value, (int, float)):
+                date = datetime.fromtimestamp(value/1000, timezone.utc)
+            else:
+                date = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+                date = date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date.astimezone(timezone.utc)
+        except (ValueError, TypeError, OverflowError, OSError):
+            missing_dates += 1
+            continue
+        year = years.setdefault(date.year, {'urls': set(), 'districts': {}, 'surveys': 0})
+        year['urls'].add(url)
+        year['surveys'] += 1
+        district = str(record.get('usacedistrictcode') or '').upper().removeprefix('CE')
+        year['districts'].setdefault(district, set()).add(url)
+    return dict(years=[dict(year=year, packages=len(info['urls']), surveys=info['surveys'],
+                            districts={district: len(urls) for district, urls in sorted(info['districts'].items())})
+                       for year, info in sorted(years.items(), reverse=True)],
+                where=where, matching_surveys=matched, missing_dates=missing_dates, missing_urls=missing_urls)
 
 
 def sha256_file(path, cancelled=None):
@@ -403,6 +450,16 @@ def download_selection(report, urls, output, session, notify=None, cancelled=Non
 
 
 def run(args, session):
+    if args.list_years:
+        patterns = args.channel_pattern or [f'CE{code}_LM_*' for code in args.districts]
+        available = discover_available_years(session, args.layer, args.districts, patterns, args.channel_field)
+        print('Available survey acquisition years (distinct data packages):')
+        for item in available['years']:
+            counts = ', '.join(f'{district}: {count}' for district, count in item['districts'].items())
+            print(f'{item["year"]}: {item["packages"]} packages ({counts})')
+        print(f'{available["missing_urls"]} matching surveys lack package links; '
+              f'{available["missing_dates"]} linked surveys lack usable acquisition dates.')
+        return 0 if available['years'] else 2
     report = prepare_report(args, session)
     output = args.output.expanduser().resolve()
     print(f'{report["candidate_count"]} district/year surveys; {report["matched_count"]} match the channel patterns.')
@@ -470,6 +527,7 @@ def parse_args(argv=None):
     parser.add_argument('--output', type=Path, default=Path('output/ehydro_lmr_2025'), help='Directory for reports and packages.')
     parser.add_argument('--catalog-only', action='store_true', help='Write the selection and URLs without downloading packages.')
     parser.add_argument('--list-channels', action='store_true', help='List all district/year channel IDs; implies --catalog-only.')
+    parser.add_argument('--list-years', action='store_true', help='Report all acquisition years with package links for the district/channel filters, without downloading.')
     parser.add_argument('--layer', default=LAYER, help='Override the ArcGIS survey layer URL.')
     parser.add_argument('--estimate-mbps', type=float, default=50., help='Assumed connection speed in megabits/s for the initial estimate (default: 50).')
     mode = parser.add_mutually_exclusive_group()
@@ -494,7 +552,7 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
-    if args.gui or not (args.headless or args.catalog_only or args.list_channels):
+    if args.gui or not (args.headless or args.catalog_only or args.list_channels or args.list_years):
         try:
             if __package__:
                 from .ehydro_gui import launch

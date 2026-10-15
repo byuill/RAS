@@ -5,10 +5,10 @@ import sys
 import threading
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import Qt, QThread, QTimer, Signal, Slot
-from PySide6.QtWidgets import (QApplication, QCheckBox, QDoubleSpinBox, QFileDialog,
+from PySide6.QtCore import Qt, QThread, QTimer, QSignalBlocker, Signal, Slot
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog,
     QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMainWindow,
-    QPlainTextEdit, QProgressBar, QPushButton, QSpinBox, QSplitter, QTableWidget,
+    QPlainTextEdit, QProgressBar, QPushButton, QSplitter, QTableWidget,
     QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
 if __package__:
@@ -56,6 +56,8 @@ class DownloadWindow(QMainWindow):
         self.args = args or core.parse_args([])
         self.session_factory = session_factory or core.session_with_retries
         self.report = None
+        self.available_years = None
+        self.auto_destination = self.args.output == Path('output/ehydro_lmr_2025')
         self.packages = []
         self.worker = None
         self.operation = None
@@ -77,9 +79,12 @@ class DownloadWindow(QMainWindow):
         self.settings = QWidget()
         controls = QGridLayout(self.settings)
         controls.setContentsMargins(0, 4, 0, 4)
-        self.year = QSpinBox()
-        self.year.setRange(1900, 9998)
-        self.year.setValue(self.args.year)
+        self.year = QComboBox()
+        self.year.addItem('Discovering available years…', None)
+        self.year.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.year.setMinimumContentsLength(22)
+        self.years_button = QPushButton('Refresh available years')
+        self.years_button.clicked.connect(self.refresh_years)
         self.mvk, self.mvm = QCheckBox('MVK · Vicksburg'), QCheckBox('MVM · Memphis')
         self.mvk.setChecked('MVK' in self.args.districts)
         self.mvm.setChecked('MVM' in self.args.districts)
@@ -89,7 +94,8 @@ class DownloadWindow(QMainWindow):
         district_row.addStretch()
         controls.addWidget(QLabel('Survey start year'), 0, 0)
         controls.addWidget(self.year, 0, 1)
-        controls.addLayout(district_row, 0, 2, 1, 3)
+        controls.addWidget(self.years_button, 0, 2)
+        controls.addLayout(district_row, 0, 3, 1, 2)
         self.patterns = QLineEdit('; '.join(self.args.channel_pattern or
                                           [f'CE{d}_LM_*' for d in self.args.districts]))
         self.patterns.setToolTip('Separate channel patterns with semicolons. * matches any sequence; underscores are literal.')
@@ -102,6 +108,9 @@ class DownloadWindow(QMainWindow):
         controls.addWidget(self.destination, 2, 1, 1, 3)
         controls.addWidget(browse, 2, 4)
         layout.addWidget(self.settings)
+        self.years_label = QLabel('Available acquisition years will be discovered for the selected districts and channel patterns.')
+        self.years_label.setWordWrap(True)
+        layout.addWidget(self.years_label)
 
         actions = QHBoxLayout()
         self.find_button = QPushButton('Find files')
@@ -181,38 +190,80 @@ class DownloadWindow(QMainWindow):
         bottom.addWidget(self.download_button)
         bottom.addWidget(self.stop_button)
         layout.addLayout(bottom)
-        self.year.valueChanged.connect(self._invalidate)
-        self.mvk.toggled.connect(self._invalidate)
-        self.mvm.toggled.connect(self._invalidate)
-        self.patterns.textChanged.connect(self._invalidate)
+        self.year.currentIndexChanged.connect(self._year_changed)
+        self.mvk.toggled.connect(self._invalidate_years)
+        self.mvm.toggled.connect(self._invalidate_years)
+        self.patterns.textChanged.connect(self._invalidate_years)
         self.destination.textChanged.connect(self._invalidate)
+        self.destination.textEdited.connect(self._custom_destination)
         self._busy(False)
         self._estimate()
         if auto_discover:
-            QTimer.singleShot(0, self.discover)
+            QTimer.singleShot(0, self.refresh_years)
 
     def _browse(self):
         path = QFileDialog.getExistingDirectory(self, 'Choose download destination', self.destination.text())
         if path:
+            self.auto_destination = False
             self.destination.setText(path)
+
+    def _custom_destination(self, *args):
+        self.auto_destination = False
+
+    def _clear_inventory(self):
+        self.report = None
+        self.packages = []
+        self.table.setRowCount(0)
+        self.details.clear()
+        self.download_button.setEnabled(False)
+        self.file_progress.setRange(0, 1000)
+        self.file_progress.setValue(0)
+        self.overall_progress.setRange(0, 1000)
+        self.overall_progress.setValue(0)
+        self.current_label.setText('No transfers started for this selection.')
+        self.transfer_label.setText('ETA updates after the selected year’s files are listed.')
+
+    def _invalidate_years(self, *args):
+        self._clear_inventory()
+        self.available_years = None
+        with QSignalBlocker(self.year):
+            self.year.clear()
+            self.year.addItem('Refresh available years…', None)
+        self.years_label.setText('District or channel filters changed. Click Refresh available years.')
+        self._busy(False)
+        self._estimate()
+
+    def _year_changed(self, *args):
+        self._clear_inventory()
+        year = self.year.currentData()
+        if year is not None:
+            if self.auto_destination:
+                self.destination.setText(str((Path('output')/f'ehydro_lmr_{year}').resolve()))
+            self.inventory_label.setText(f'Loading matching packages for {year}…')
+            QTimer.singleShot(0, self.discover)
+        self._busy(False)
+        self._estimate()
 
     def _invalidate(self, *args):
         self.report = None
         self.download_button.setEnabled(False)
         self.estimate_label.setText('Settings changed. Click Find files to refresh the inventory and check this destination.')
 
-    def _options(self):
+    def _options(self, require_year=True):
         values = vars(self.args).copy()
-        values.update(year=self.year.value(), districts=[code for code, box in [('MVK', self.mvk), ('MVM', self.mvm)] if box.isChecked()],
+        values.update(year=self.year.currentData(), districts=[code for code, box in [('MVK', self.mvk), ('MVM', self.mvm)] if box.isChecked()],
                       channel_pattern=[p.strip() for p in self.patterns.text().split(';') if p.strip()],
                       output=Path(self.destination.text()).expanduser().resolve(), catalog_only=True, list_channels=False)
-        if not values['districts'] or not values['channel_pattern'] or not self.destination.text().strip():
-            raise ValueError('Choose at least one district, a channel pattern and a destination folder.')
+        if not values['districts'] or not values['channel_pattern']:
+            raise ValueError('Choose at least one district and a channel pattern.')
+        if require_year and (values['year'] is None or not self.destination.text().strip()):
+            raise ValueError('Choose an available survey year and a destination folder.')
         return argparse.Namespace(**values)
 
     def _busy(self, busy):
         self.settings.setEnabled(not busy)
-        self.find_button.setEnabled(not busy)
+        self.year.setEnabled(not busy and self.available_years is not None and bool(self.available_years['years']))
+        self.find_button.setEnabled(not busy and self.year.currentData() is not None)
         for widget in [self.all_button, self.none_button, self.pending_button]:
             widget.setEnabled(not busy)
         for row in range(self.table.rowCount()):
@@ -253,6 +304,43 @@ class DownloadWindow(QMainWindow):
                 core.inspect_packages(report, args.output, session, notify, cancelled)
                 return report
         self._start('inventory', task)
+
+    def refresh_years(self):
+        if self.worker is not None:
+            return
+        try:
+            args = self._options(require_year=False)
+        except ValueError as exc:
+            self.status.setText(str(exc))
+            return
+        self._invalidate_years()
+        self.status.setText('Discovering all available acquisition years for these channels…')
+        self.overall_progress.setRange(0, 0)
+
+        def task(notify, cancelled):
+            with self.session_factory() as session:
+                return core.discover_available_years(session, args.layer, args.districts,
+                                                     args.channel_pattern, args.channel_field, cancelled)
+        self._start('years', task)
+
+    def _show_years(self, available):
+        self.available_years = available
+        with QSignalBlocker(self.year):
+            self.year.clear()
+            self.year.addItem('Select a year…' if available['years'] else 'No available data', None)
+            for item in available['years']:
+                districts = ', '.join(f'{name}: {count}' for name, count in item['districts'].items())
+                self.year.addItem(f'{item["year"]} — {item["packages"]} packages ({districts})', item['year'])
+        summary = ', '.join(f'{item["year"]} ({item["packages"]})' for item in available['years']) or 'none'
+        text = 'Available acquisition years (data packages): '+summary+'.'
+        if available['missing_dates'] or available['missing_urls']:
+            text += (f' Excluded: {available["missing_urls"]} surveys without data links; '
+                     f'{available["missing_dates"]} linked surveys without usable acquisition dates.')
+        self.years_label.setText(text)
+        self.log.appendPlainText(text)
+        self.status.setText('Choose a year to list its files.' if available['years'] else
+                            'No dated data-package links match these districts and channel patterns.')
+        self.inventory_label.setText('Choose an available year; files will be listed before any downloads start.')
 
     def selected_urls(self):
         return {self.table.item(row, 0).data(Qt.UserRole) for row in range(self.table.rowCount())
@@ -309,6 +397,10 @@ class DownloadWindow(QMainWindow):
 
     def _estimate(self, *args):
         if not hasattr(self, 'estimate_label'):
+            return
+        if self.report is None and not self.packages:
+            self.estimate_label.setText('Select an available year to list its files and estimate download time.')
+            self.download_button.setEnabled(False)
             return
         selected = self.selected_urls()
         size, unknown, pending = remaining_selection(self.packages, selected)
@@ -399,6 +491,8 @@ class DownloadWindow(QMainWindow):
             text = 'Stopped. Completed files will be skipped on the next run.' if isinstance(worker.error, core.DownloadCancelled) else f'Operation failed: {worker.error}'
             self.status.setText(text)
             self.log.appendPlainText(text)
+        elif operation == 'years':
+            self._show_years(worker.result)
         else:
             self.report = worker.result
             self._fill(core.package_inventory(self.report), checked if operation == 'download' else None)
@@ -411,7 +505,7 @@ class DownloadWindow(QMainWindow):
                                     f'{s["downloaded"]} downloaded, {s["skipped"]} already present, '
                                     f'{s["failed"]} failed, {s["unfinished"]} unfinished.')
         self.overall_progress.setRange(0, 1000)
-        if operation == 'inventory':
+        if operation in {'inventory', 'years'}:
             self.overall_progress.setValue(0)
         self.file_progress.setRange(0, 1000)
         self._busy(False)

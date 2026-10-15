@@ -14,8 +14,18 @@ Open the desktop downloader:
 python eHydro/download_ehydro.py
 ```
 
-The GUI automatically finds the matching surveys and lists **every matching
-archive before any survey data are downloaded**. Each row shows the filename,
+The GUI first queries the live catalog for **all available acquisition years**
+matching the selected districts and channel patterns. It reports the years and
+distinct data-package counts, including counts by district in the year dropdown.
+Years are discovered from actual records, not inferred as a continuous range.
+Only matching records with package links and usable acquisition start dates
+contribute to this list; excluded records are counted separately. This discovery
+reads catalog metadata without downloading archives or inspecting every year's
+file sizes.
+
+Choose the year of interest in **Survey start year**. The GUI then automatically
+lists **every matching archive for that year before any survey data are
+downloaded**. No year is selected automatically. Each row shows the filename,
 district, channel, acquisition date, size and local/transfer status. Select a row
 to inspect its full download URL, coordinate-system metadata, and the complete
 list of files USACE says the archive contains. The list represents downloadable
@@ -24,8 +34,11 @@ archives; choosing an archive downloads all its included files together.
 All packages with download URLs start checked. Uncheck any unwanted packages or
 use **Check all**, **Uncheck all**, and **Check new files only**. Packages missing
 download URLs are reported but cannot be checked. Choose the destination before
-downloading. Changing the destination or query settings requires **Find files**
-again so existing-file checks apply to the correct folder and selection.
+downloading. Changing districts or channel patterns clears the old year list;
+click **Refresh available years**, then select a year. Changing the destination
+requires **Find files** again so existing-file checks apply to the correct folder.
+The default destination follows the selected year (`output/ehydro_lmr_2020`, for
+example). A manually chosen destination is preserved when the year changes.
 
 The GUI estimates the remaining size and download time using each server file's
 reported size and an adjustable **Planning speed (Mbps)**, initially 50 megabits
@@ -49,6 +62,15 @@ For a terminal-only inventory of channel IDs and package links:
 python eHydro/download_ehydro.py --list-channels
 ```
 
+To report every available year and district-specific package counts without
+opening the GUI, downloading packages, or creating output files:
+
+```bash
+python eHydro/download_ehydro.py --list-years
+```
+
+`--list-years` uses the district/channel filters and ignores `--year`.
+
 To download all matched packages without the GUI:
 
 ```bash
@@ -64,16 +86,18 @@ python eHydro/download_ehydro.py --headless --year 2025 --districts MVK MVM \
 ```
 
 Use `--gui` to explicitly request the desktop, and `--estimate-mbps 100` to set
-the initial planning speed. `--catalog-only` and `--list-channels` remain terminal
+the initial planning speed. `--catalog-only`, `--list-channels` and `--list-years` remain terminal
 commands and do not open the GUI. Headless downloads also report every matching
 archive and its listed contents before transfers, check sizes/local files, and
 print progress and ETA updates.
 
-The defaults select Vicksburg (MVK) and Memphis (MVM), **survey acquisition start
-dates from January 1, 2025 inclusive through January 1, 2026 exclusive**, and
-channel IDs matching `CEMVK_LM_*` or `CEMVM_LM_*`. They do not select by upload
-date. Surveys beginning in 2024 and ending in 2025 are excluded under this
-start-date definition. All matching survey packages are selected; the script
+The district/channel defaults are Vicksburg (MVK), Memphis (MVM), and channel IDs
+matching `CEMVK_LM_*` or `CEMVM_LM_*`. The headless workflow still defaults to
+`--year 2025`; the GUI requires a choice from the live list. For any selected
+year, the acquisition start date must be January 1 inclusive through the next
+January 1 exclusive, using UTC. This does not select by upload date. Surveys
+beginning in 2024 and ending in 2025 are excluded when selecting 2025 under this
+start-date definition. All matching survey packages start checked; the script
 does not discard older surveys of the same channel in favor of the latest one.
 The API stores districts as `CEMVK` and `CEMVM`; the script translates the short
 `--districts MVK MVM` arguments to those full symbols for its server query.
@@ -179,3 +203,8 @@ ZIP CRC validation, followed by a second GUI run that skipped the completed file
 with zero bytes transferred. Automated offscreen tests exercise selection,
 progress, Stop/restart, receipt recovery without a manifest, and safe window
 closure during a transfer. ETA figures are estimates, not promised durations.
+
+Live year discovery returned matching acquisition years 2015–2026 for the default
+district/channel filters. Selecting 2020 in the GUI loaded its 56 MVK packages
+and updated the default destination to `output/ehydro_lmr_2020`. Availability and
+counts can change as USACE updates the catalog; each GUI refresh queries it again.
