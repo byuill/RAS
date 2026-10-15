@@ -287,6 +287,11 @@ an active ArcPy/file read must finish before the operation can close safely.
 
 ## Known-answer validation and local limits
 
+To inventory and download Lower Mississippi eHydro survey packages for MVK/MVM
+in 2025, see the [bulk downloader instructions](eHydro/README.md).
+Start with `python eHydro/download_ehydro.py --list-channels` to confirm channel
+IDs and package links before downloading archives.
+
 ```bash
 python -m bathymetry_calibration.demo --output /new/empty/demo
 python -m bathymetry_calibration --config /new/empty/demo/config.json --hdf /new/empty/demo/synthetic.p01.hdf --headless --before-survey baseline --after-survey target --output /new/exports
