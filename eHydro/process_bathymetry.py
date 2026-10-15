@@ -2,6 +2,7 @@
 
 Run with ArcGIS Pro's Python, not the workbench virtual environment. Only the
 standard library and ArcPy are required. See POSTPROCESSING.md for examples.
+Omit the master path to select the folder containing files/ in a folder picker.
 """
 from __future__ import annotations
 
@@ -127,6 +128,41 @@ def archives_in(master):
                       and not name.startswith('bathy_work_')]
         result.extend(Path(directory)/name for name in names if name.lower().endswith('.zip'))
     return sorted(result, key=lambda path: str(path.relative_to(master)).casefold())
+
+
+def select_master_folder():
+    """Use a native folder picker, with a console fallback if Tk is unavailable."""
+    log('Select the master folder (for example ehydro_lmr_2025) that contains files/ and its ZIP archives.')
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except ImportError:
+        tk = None
+    if tk is not None:
+        root = None
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+            selected = filedialog.askdirectory(
+                parent=root, title='Select master folder containing files and ZIP archives',
+                initialdir=str(Path.cwd()), mustexist=True)
+            return Path(selected) if selected else None
+        except tk.TclError as exc:
+            log(f'Folder picker unavailable: {exc}')
+        finally:
+            if root is not None:
+                try:
+                    root.destroy()
+                except tk.TclError:
+                    pass
+    if sys.stdin is None or not sys.stdin.isatty():
+        raise RuntimeError('Folder picker unavailable. Run in an interactive terminal or supply the master folder path on the command line.')
+    try:
+        selected = input('Master folder path (contains files/; Enter to cancel): ').strip().strip('\"')
+    except (EOFError, KeyboardInterrupt):
+        return None
+    return Path(selected) if selected else None
 
 
 def safe_member(name):
@@ -441,6 +477,8 @@ def process(args, arcpy):
     if not archives:
         raise ValueError('No ZIP archives were found under the master directory.')
     log(f'Found {len(archives)} ZIP archive(s). Output: {output_gdb}, {master.name}.tif')
+    if (master/'files').is_dir():
+        log(f'ZIP search includes the files subfolder: {master/"files"}')
     log(f'Output grid: {args.cell_size:g} {output_sr.linearUnitName}; {output_sr.name}. Z values will not be converted.')
     download_report = download_manifest(master)
     scratch_root = Path(tempfile.mkdtemp(prefix='bathy_work_', dir=master))
@@ -538,7 +576,8 @@ def process(args, arcpy):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('master', type=Path, help='Master download folder, e.g. E:\\LMR\\ehydro_lmr_2025')
+    parser.add_argument('master', type=Path, nargs='?',
+                        help='Master download folder containing files/, e.g. E:\\LMR\\ehydro_lmr_2025; omit to open a folder picker.')
     parser.add_argument('--cell-size', type=float, default=5., help='Output grid spacing in output-CRS units (default: 5 metres).')
     parser.add_argument('--output-crs', default='EPSG:26915', help='Projected CRS, EPSG/ESRI code or .prj path (default: NAD83 / UTM zone 15N).')
     parser.add_argument('--geographic-transformation', help='Explicit ArcGIS transformation when horizontal datums differ.')
@@ -564,6 +603,12 @@ def main(argv=None):
         print('Run this script with ArcGIS Pro Python (propy.bat). ArcPy is required to read/write geodatabase rasters.', file=sys.stderr)
         return 1
     try:
+        if args.master is None:
+            args.master = select_master_folder()
+            if args.master is None:
+                log('No master folder selected. Processing canceled.')
+                return 0
+        log(f'Master folder: {args.master.expanduser().resolve()}')
         return process(args, arcpy)
     except Exception as exc:
         log('FAILED: '+str(exc))

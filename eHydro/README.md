@@ -3,6 +3,8 @@
 After downloading, use [the bathymetry post-processing script](POSTPROCESSING.md)
 to extract packages, collect bathymetry in a geodatabase and create one GeoTIFF
 mosaic. It runs in ArcGIS Pro Python and reports progress in the terminal.
+Omit its master-folder argument to open a folder picker, then select the folder
+containing `files/` and the downloaded ZIP archives.
 
 `eHydro/download_ehydro.py` downloads the **All Data** packages linked by the
 public [USACE eHydro survey layer](https://services7.arcgis.com/n1YM8pTrFmm7L4hs/arcgis/rest/services/eHydro_Survey_Data/FeatureServer/0).

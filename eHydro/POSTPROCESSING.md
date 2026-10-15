@@ -23,15 +23,29 @@ floating-point output and a Z factor of 1. Without this option, packages without
 selected rasters are reported as skipped. If nothing can be copied, the script
 exits with an error and creates no mosaic.
 
-In PowerShell, run this from your local RAS checkout (adjust the master path):
+In PowerShell, run this from your local RAS checkout:
 
 ```powershell
-& "$env:ProgramFiles\ArcGIS\Pro\bin\Python\scripts\propy.bat" .\eHydro\process_bathymetry.py "E:\LMR\ehydro_lmr_2025" --tin-to-raster
+& "$env:ProgramFiles\ArcGIS\Pro\bin\Python\scripts\propy.bat" .\eHydro\process_bathymetry.py --tin-to-raster
 ```
+
+The folder picker asks for the **master folder**, for example
+`E:\LMR\ehydro_lmr_2025`. Select this parent folder containing `files`, where
+the downloaded ZIP archives reside. The script automatically scans `files/`
+and any deeper subfolders. Outputs are saved in the selected master folder.
+Canceling the picker exits without processing. If a folder picker is unavailable,
+an interactive terminal prompts for the path instead.
 
 If your packages already contain rasters, omit `--tin-to-raster`. For a
 non-default ArcGIS installation, adjust the `propy.bat` path. From ArcGIS Pro's
 Python Command Prompt, the equivalent is:
+
+```bat
+python eHydro\process_bathymetry.py --tin-to-raster
+```
+
+You can still supply the master path to bypass the picker, including in
+automated runs:
 
 ```bat
 python eHydro\process_bathymetry.py "E:\LMR\ehydro_lmr_2025" --tin-to-raster
