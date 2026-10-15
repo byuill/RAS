@@ -41,6 +41,15 @@ the saved raw inputs, split table, and parameters reproduced their canonical
 hashes. The optional minor-tributary closure scenario has zero regional residual
 on the supplied calibration. No HEC-RAS hydraulic/sediment run was performed.
 
+The subsequent diagram/rating update adds junction references, operating-rule
+plots, and parameter explanations. All default flows for the 9,497 supplied days
+match the previous engine exactly. New checks cover local/merged percentage
+denominators, 100% allocation totals, undefined zero-flow shares, agreement of
+plotted ratings with the engine, and text/connector geometry in full and single
+panel diagrams at low, high, and zero flow. The full suite passed 182 tests during
+this update. Plot markers use each pass's own remaining flow; encountered flow
+spans are explicitly distinguished from undocumented calibration limits.
+
 ## Defaults retained and exposed for engineering review
 
 The supplied ORCC series exceeds the 620,000 cfs scenario ceiling on **9 days**

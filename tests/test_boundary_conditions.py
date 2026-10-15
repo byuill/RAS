@@ -203,11 +203,17 @@ def test_smoothing_changes_forcing_but_preserves_source_and_allocation():
 
 
 def test_export_is_complete_reproducible_and_non_destructive(tmp_path):
-    r = calculate_budget(inputs([600000]*3, start='2000-02-28'))
-    out = export_result(r, tmp_path)
+    r = calculate_budget(inputs([600000, 500000, 400000], start='2000-02-28'))
+    out = export_result(r, tmp_path, index=1)
     assert {'flows.csv', 'parameters.json', 'report.json', 'qaqc_issues.csv', 'ForRon.xlsx',
-            'river_budget.png', 'hydrographs.png', 'boundary_roles.csv'} <= {p.name for p in out.iterdir()}
-    assert json.loads((out/'report.json').read_text())['days'] == 3
+            'river_budget.png', 'hydrographs.png', 'boundary_roles.csv', 'junction_budget.csv',
+            'pass_ratings.png', 'rating_notes.html'} <= {p.name for p in out.iterdir()}
+    report = json.loads((out/'report.json').read_text())
+    assert report['days'] == 3 and report['diagram_date'] == '2000-02-29'
+    junctions = pd.read_csv(out/'junction_budget.csv')
+    assert junctions.date.unique().tolist() == ['2000-02-29']
+    assert junctions.loc[junctions.boundary == 'ORCC_total', 'percent'].iloc[0] == pytest.approx(10)
+    assert 'inactive explanatory alternatives' in (out/'rating_notes.html').read_text()
     assert export_result(r, tmp_path) != out
     assert len(pd.read_csv(out/'flows.csv')) == 3
 

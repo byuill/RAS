@@ -7,13 +7,17 @@ from PySide6.QtCore import QDate, QSignalBlocker, Qt, QTimer
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDateEdit, QFileDialog, QFormLayout,
     QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton, QScrollArea,
     QSlider, QSpinBox, QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem,
-    QTabWidget, QTextEdit, QVBoxLayout, QWidget, QHeaderView)
+    QTabWidget, QTextEdit, QTextBrowser, QVBoxLayout, QWidget, QHeaderView)
 
 from .qt_support import MplCanvas, WorkerManager
 from .engine import calculate_budget
 from .export import dss_available, export_result
 from .parameters import Parameters
 from .plots import LABELS, draw_hydrographs, draw_network
+from .budget_view import junction_budget, percent_text
+from .explanations import GROUP_GUIDES, PARAMETER_NOTES
+from .ratings import draw_rating_curves, rating_notes, rating_group, rating_range
+from .schemes import PASS_RATINGS, RATING_CHOICES
 
 
 CHOICES = {
@@ -43,7 +47,9 @@ class BoundaryWindow(QMainWindow):
         title = QLabel('LOWER MISSISSIPPI  /  FLOW BOUNDARY CONDITIONS')
         title.setStyleSheet('font-size: 19px; font-weight: bold; color: #173e58; padding: 8px 0;')
         layout.addWidget(title)
-        layout.addWidget(QLabel('Review empirical flow partitions, operating assumptions, and daily water budgets before exporting to HEC-RAS.'))
+        subtitle = QLabel('Review empirical flow partitions, operating assumptions, and daily water budgets before exporting to HEC-RAS.')
+        subtitle.setWordWrap(True)
+        layout.addWidget(subtitle)
         self.input_edit = QLineEdit(str(input_path or self.base/'new_data_RF.csv'))
         self.split_edit = QLineEdit(str(self.base/'ohio_split_wyV2.csv'))
         self.stage_edit = QLineEdit()
@@ -66,7 +72,7 @@ class BoundaryWindow(QMainWindow):
         side = QVBoxLayout(self.parameter_panel)
         side.setContentsMargins(0, 6, 12, 0)
         side.addWidget(QLabel('SCENARIO PARAMETERS'))
-        group_combo = QComboBox()
+        group_combo = self.group_combo = QComboBox()
         groups = list(dict.fromkeys(f.metadata['group'] for f in fields(Parameters)))
         group_combo.addItems(groups)
         side.addWidget(group_combo)
@@ -76,6 +82,11 @@ class BoundaryWindow(QMainWindow):
             form = QFormLayout(body)
             form.setRowWrapPolicy(QFormLayout.WrapAllRows)
             form.setVerticalSpacing(12)
+            guide = QLabel(GROUP_GUIDES[group])
+            guide.setWordWrap(True)
+            guide.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            guide.setStyleSheet('background: #edf4f8; padding: 8px; color: #173e58;')
+            form.addRow(guide)
             for f in fields(Parameters):
                 if f.metadata['group'] != group:
                     continue
@@ -94,11 +105,12 @@ class BoundaryWindow(QMainWindow):
                 else:
                     editor = QLineEdit()
                     editor.textChanged.connect(self._mark_dirty)
-                editor.setToolTip(f.metadata['help'])
+                explanation = PARAMETER_NOTES.get(f.name, f.metadata['help'])
+                editor.setToolTip(explanation)
                 label = QLabel(f.metadata['label'])
-                label.setToolTip(f.metadata['help'])
+                label.setToolTip(explanation)
                 form.addRow(label, editor)
-                help_label = QLabel(f.metadata['help'])
+                help_label = QLabel(explanation)
                 help_label.setWordWrap(True)
                 help_label.setStyleSheet('color: #60717e; font-size: 11px;')
                 form.addRow(help_label)
@@ -123,7 +135,7 @@ class BoundaryWindow(QMainWindow):
         self.calculate_button.setStyleSheet('background: #206688; color: white; padding: 10px; font-weight: bold;')
         self.calculate_button.clicked.connect(self.calculate)
         side.addWidget(self.calculate_button)
-        self.parameter_panel.setMinimumWidth(345)
+        self.parameter_panel.setMinimumWidth(315)
         self.parameter_panel.setMaximumWidth(480)
         splitter.addWidget(self.parameter_panel)
         right = QWidget()
@@ -141,21 +153,107 @@ class BoundaryWindow(QMainWindow):
         self.date_edit.dateChanged.connect(self._date_changed)
         self.slider = QSlider(Qt.Horizontal)
         self.slider.valueChanged.connect(self._day_changed)
+        previous = QPushButton('‹')
+        previous.setToolTip('Previous day')
+        previous.setMaximumWidth(30)
+        previous.clicked.connect(lambda: self.slider.setValue(self.slider.value()-1))
+        next_day = QPushButton('›')
+        next_day.setToolTip('Next day')
+        next_day.setMaximumWidth(30)
+        next_day.clicked.connect(lambda: self.slider.setValue(self.slider.value()+1))
+        self.inspect_gap = QPushButton('Largest gap')
+        self.inspect_gap.setToolTip('Inspect the day with the largest absolute upstream budget residual')
+        self.inspect_gap.clicked.connect(self._inspect_gap)
         date_row.addWidget(self.date_edit)
+        date_row.addWidget(previous)
+        date_row.addWidget(next_day)
         date_row.addWidget(self.slider, 1)
-        review.addLayout(date_row)
+        date_row.addWidget(self.inspect_gap)
+        self.date_panel = QWidget()
+        self.date_panel.setLayout(date_row)
+        review.addWidget(self.date_panel)
         self.tabs = QTabWidget()
         self.network = MplCanvas(width=13, height=8)
         self.hydrographs = MplCanvas(width=12, height=8)
+        network_tab = QWidget()
+        network_layout = QVBoxLayout(network_tab)
+        network_layout.setContentsMargins(0, 0, 0, 0)
+        network_controls = QHBoxLayout()
+        network_controls.addWidget(QLabel('Diagram view'))
+        self.network_view = QComboBox()
+        for value, name in [('all', 'Full network'), ('regional', 'Regional inflows & ORCC'), ('lower', 'Lower river & passes')]:
+            self.network_view.addItem(name, value)
+        self.network_view.currentIndexChanged.connect(self._network_view_changed)
+        network_controls.addWidget(self.network_view)
+        network_hint = QLabel('Scroll for the full diagram.')
+        network_hint.setWordWrap(True)
+        network_controls.addWidget(network_hint, 1)
+        network_layout.addLayout(network_controls)
+        self.network_scroll = QScrollArea()
+        self.network_scroll.setWidgetResizable(True)
+        self.network_scroll.setWidget(self.network)
+        network_layout.addWidget(self.network_scroll)
+        self._size_network()
+        self.ratings = MplCanvas(width=11, height=7)
+        ratings_tab = QWidget()
+        ratings_layout = QVBoxLayout(ratings_tab)
+        ratings_layout.setContentsMargins(0, 0, 0, 0)
+        rating_controls = QHBoxLayout()
+        self.rating_choice = QComboBox()
+        for value, name in RATING_CHOICES:
+            self.rating_choice.addItem(name, value)
+        self.rating_choice.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.rating_choice.setMinimumContentsLength(12)
+        self.rating_choice.currentIndexChanged.connect(self._rating_changed)
+        self.rating_auto = QCheckBox('Auto range')
+        self.rating_auto.setChecked(True)
+        self.rating_auto.toggled.connect(self._rating_changed)
+        self.rating_max = QSpinBox()
+        self.rating_max.setRange(1, 2147483647)
+        self.rating_max.setSingleStep(100000)
+        self.rating_max.setSuffix(' cfs')
+        self.rating_max.setValue(1500000)
+        self.rating_max.setEnabled(False)
+        self.rating_max.valueChanged.connect(self._rating_changed)
+        self.rating_raw = QCheckBox('Show raw formulas')
+        self.rating_raw.toggled.connect(self._rating_changed)
+        edit_curve = QPushButton('Edit parameters')
+        edit_curve.clicked.connect(self._edit_rating_parameters)
+        rating_controls.addWidget(self.rating_choice, 1)
+        rating_controls.addWidget(self.rating_auto)
+        rating_controls.addWidget(self.rating_max)
+        rating_controls.addWidget(edit_curve)
+        ratings_layout.addLayout(rating_controls)
+        ratings_layout.addWidget(self.rating_raw)
+        ratings_split = QSplitter(Qt.Vertical)
+        self.ratings_scroll = QScrollArea()
+        self.ratings_scroll.setWidgetResizable(True)
+        self.ratings_scroll.setWidget(self.ratings)
+        ratings_split.addWidget(self.ratings_scroll)
+        self.rating_explanation = QTextBrowser()
+        self.rating_explanation.setMinimumHeight(95)
+        ratings_split.addWidget(self.rating_explanation)
+        ratings_split.setSizes([520, 180])
+        ratings_layout.addWidget(ratings_split)
         self.ledger = QTableWidget(0, 3)
         self.ledger.setHorizontalHeaderLabels(['Flow / ledger entry', 'Value', 'Units'])
         self.ledger.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.ledger.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.junction_ledger = QTableWidget(0, 6)
+        self.junction_ledger.setHorizontalHeaderLabels(['Boundary / junction', 'Branch (cfs)', 'Share', 'Reference (cfs)', 'Mainstem after (cfs)', 'Percentage reference'])
+        self.junction_ledger.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.junction_ledger.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.junction_ledger.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+        self.junction_ledger.setWordWrap(True)
+        ledger_tabs = QTabWidget()
+        ledger_tabs.addTab(self.junction_ledger, 'Junction percentages')
+        ledger_tabs.addTab(self.ledger, 'All flow / audit fields')
         self.qaqc = QTextEdit()
         self.qaqc.setReadOnly(True)
-        self.tabs.addTab(self.network, 'River flow budget')
+        self.tabs.addTab(network_tab, 'River flow budget')
+        self.tabs.addTab(ratings_tab, 'Ratings & operating rules')
         self.tabs.addTab(self.hydrographs, 'Hydrographs & residuals')
-        self.tabs.addTab(self.ledger, 'Daily ledger')
+        self.tabs.addTab(ledger_tabs, 'Daily ledger')
         self.tabs.addTab(self.qaqc, 'QA/QC & assumptions')
         review.addWidget(self.tabs, 1)
         self.export_button = QPushButton('Export checked run…')
@@ -180,6 +278,9 @@ class BoundaryWindow(QMainWindow):
         self.slider.setEnabled(False)
         self.statusBar().showMessage('Ready to calculate. Existing input and DSS files remain untouched.')
         self.editors['water_year'].toggled.connect(self._year_type_changed)
+        for name in ['input_reference', 'orcc_mode', 'spill_style', 'upstream_balance', 'consider_head', 'eflows', 'use_input_state']:
+            editor = self.editors[name]
+            (editor.toggled if isinstance(editor, QCheckBox) else editor.currentIndexChanged).connect(self._refresh_applicability)
         self.set_parameters(parameters or Parameters())
         self._loading = False
         # Draw selected-day network only after slider dragging pauses.
@@ -235,6 +336,7 @@ class BoundaryWindow(QMainWindow):
             else:
                 editor.setText(', '.join(format(v, '.12g') for v in value) if name == 'bp_return_weights' else format(value, '.12g'))
         self._loading = previous
+        self._refresh_applicability()
         if Path(self.split_edit.text()).resolve() in {
             (self.base/'ohio_split_wyV2.csv').resolve(), (self.base/'ohio_split_cy.csv').resolve()}:
             self.split_edit.setText(str(self.base/('ohio_split_wyV2.csv' if p.water_year else 'ohio_split_cy.csv')))
@@ -245,13 +347,74 @@ class BoundaryWindow(QMainWindow):
             return
         self.dirty = True
         self.export_button.setEnabled(False)
-        self.summary_label.setText('Inputs changed. Click Calculate & check budget to refresh the displayed results.')
+        self.summary_label.setText('Inputs changed. Diagrams, rating curves and ledgers show the last calculated scenario. '
+                                  'Click Calculate & check budget to apply your edits.')
+
+    def _refresh_applicability(self, *args):
+        union = self.editors['input_reference'].currentData() == 'union_point'
+        calculated = self.editors['orcc_mode'].currentData() == 'calculated'
+        ratio = self.editors['spill_style'].currentData() == 'ratio'
+        for name in ['up_mmr', 'up_ohio', 'up_tribs']:
+            self.editors[name].setEnabled(union and (name != 'up_tribs' or self.editors['upstream_balance'].currentData() == 'preserve'))
+        for name in ['tl_mmr', 'tl_ohio', 'tl_tribs', 'red_ratio']:
+            self.editors[name].setEnabled(not union and (name != 'tl_tribs' or self.editors['upstream_balance'].currentData() == 'preserve'))
+        for name in ['orcc_ratio', 'rising_ratio', 'falling_ratio', 'low_ratio']:
+            self.editors[name].setEnabled(calculated)
+        head = self.editors['consider_head'].isChecked()
+        self.editors['head_ratio'].setEnabled(calculated and head)
+        self.editors['red_head'].setEnabled(head)
+        self.editors['bc_limit'].setEnabled(not ratio)
+        for name in ['bc_low_share', 'bc_high_share', 'bc_switch']:
+            self.editors[name].setEnabled(ratio)
+        for name in ['eflow_min_orcc', 'eflow_min_mainstem', 'eflow_max_mainstem']:
+            self.editors[name].setEnabled(self.editors['eflows'].isChecked())
+        states = not self.editors['use_input_state'].isChecked()
+        for name in ['fall_min', 'low_water', 'crest_days']:
+            self.editors[name].setEnabled(states)
+        for name in ['rise_window', 'rise_threshold', 'rise_min']:
+            self.editors[name].setEnabled(states or head)
+
+    def _size_network(self):
+        self.network.setMinimumSize(1180 if self.network_view.currentData() == 'all' else 620, 1320)
+
+    def _network_view_changed(self, *args):
+        self._size_network()
+        if self.result is not None:
+            draw_network(self.network.figure, self.result, self.slider.value(), self.network_view.currentData())
+            self.network.draw_idle()
+
+    def _rating_changed(self, *args):
+        self.rating_max.setEnabled(not self.rating_auto.isChecked())
+        overview = self.rating_choice.currentData() == 'all_passes'
+        self.rating_raw.setEnabled(overview or self.rating_choice.currentData() in {r.column for r in PASS_RATINGS} | {'terminal'})
+        self.ratings.setMinimumSize(840, 1120 if overview else 300)
+        if self.result is None:
+            return
+        if self.rating_auto.isChecked():
+            with QSignalBlocker(self.rating_max):
+                self.rating_max.setValue(min(int(rating_range(self.result, self.rating_choice.currentData())), self.rating_max.maximum()))
+        draw_rating_curves(self.ratings.figure, self.result, self.slider.value(), self.rating_choice.currentData(),
+                           None if self.rating_auto.isChecked() else self.rating_max.value(), self.rating_raw.isChecked())
+        self.rating_explanation.setHtml(rating_notes(self.result, self.rating_choice.currentData(), self.slider.value()))
+        self.ratings.draw_idle()
+
+    def _edit_rating_parameters(self):
+        choice = self.rating_choice.currentData()
+        self.group_combo.setCurrentText(rating_group(choice))
+        rating = next((r for r in PASS_RATINGS if r.column == choice), None)
+        if rating:
+            self.forms.currentWidget().ensureWidgetVisible(self.editors[rating.a_parameter])
+
+    def _inspect_gap(self):
+        if self.result is not None:
+            self.slider.setValue(int(self.result.flows.upstream_residual_cfs.abs().idxmax()))
 
     def _busy(self, busy):
         self.parameter_panel.setEnabled(not busy)
         self.path_panel.setEnabled(not busy)
         self.date_edit.setEnabled(not busy and self.result is not None)
         self.slider.setEnabled(not busy and self.result is not None)
+        self.date_panel.setEnabled(not busy and self.result is not None)
         if busy and hasattr(self, 'day_timer'):
             self.day_timer.stop()
         self.export_button.setEnabled(not busy and self.result is not None and not self.dirty)
@@ -272,6 +435,7 @@ class BoundaryWindow(QMainWindow):
         self.workers.submit('budget', lambda: calculate_budget(path, split, p), self._calculated, self._failed)
 
     def _calculated(self, result):
+        selected_date = pd.Timestamp(self.date_edit.date().toPython()) if self.result is not None else result.flows.date.iloc[0]
         self.result, self.dirty = result, False
         self._busy(False)
         self.date_edit.setEnabled(True)
@@ -279,9 +443,10 @@ class BoundaryWindow(QMainWindow):
         f = result.flows
         with QSignalBlocker(self.slider), QSignalBlocker(self.date_edit):
             self.slider.setRange(0, len(f)-1)
-            self.slider.setValue(0)
+            selected_index = max(0, min(len(f)-1, (selected_date-f.date.iloc[0]).days))
+            self.slider.setValue(selected_index)
             self.date_edit.setDateRange(QDate(f.date.iloc[0].date()), QDate(f.date.iloc[-1].date()))
-            self.date_edit.setDate(QDate(f.date.iloc[0].date()))
+            self.date_edit.setDate(QDate(f.date.iloc[selected_index].date()))
         residual = result.summary['max_abs_residual_cfs']
         gap = residual['upstream_residual_cfs']
         self.summary_label.setText(f'{len(f):,} daily records  ·  {result.summary["start"]} to {result.summary["end"]}\n'
@@ -331,9 +496,18 @@ class BoundaryWindow(QMainWindow):
         if self.result is None:
             return
         index = self.slider.value()
-        draw_network(self.network.figure, self.result, index)
+        draw_network(self.network.figure, self.result, index, self.network_view.currentData())
         self.network.draw_idle()
+        self._rating_changed()
         row = self.result.flows.iloc[index]
+        junctions = junction_budget(row)
+        self.junction_ledger.setRowCount(len(junctions))
+        for i, entry in junctions.iterrows():
+            after = '—' if pd.isna(entry.mainstem_after_cfs) else f'{entry.mainstem_after_cfs:,.1f}'
+            for j, text in enumerate([LABELS.get(entry.boundary, entry.boundary), f'{entry.flow_cfs:,.1f}',
+                                      percent_text(entry.percent), f'{entry.reference_flow_cfs:,.1f}', after, entry.percent_basis]):
+                self.junction_ledger.setItem(i, j, QTableWidgetItem(text))
+        self.junction_ledger.resizeRowsToContents()
         self.ledger.setRowCount(len(row)-1)
         for i, (name, value) in enumerate(row.drop('date').items()):
             units = 'ft³' if name.endswith('_ft3') else 'state' if name in ['Rising_ID', 'head_constraint'] else 'fraction' if name == 'MMR_fraction' else 'cfs'
